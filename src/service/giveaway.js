@@ -186,14 +186,14 @@ export const buildGiveawayComponents = function(ended){
                 {
                     type: 2,
                     style: ended ? 2 : 3,
-                    label: ended ? "Giveaway Ended" : "Join Giveaway",
+                    label: ended ? "⛔ Giveaway Ended" : "💸 Join Giveaway",
                     custom_id: "giveaway_join",
                     disabled: ended,
                 },
                 {
                     type: 2,
                     style: 2,
-                    label: "Participants",
+                    label: "👤 Participants",
                     custom_id: "giveaway_participants",
                 },
             ],
