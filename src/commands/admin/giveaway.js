@@ -43,6 +43,10 @@ export default {
         .addRoleOption((option) =>
             option.setName("role")
                 .setDescription("Optional role participants must have (on top of being verified)")
+                .setRequired(false))
+        .addUserOption((option) =>
+            option.setName("author")
+                .setDescription("Who hosts the giveaway (default: you)")
                 .setRequired(false)),
 
     /**
@@ -55,6 +59,7 @@ export default {
         const description = interaction.options.getString("description", true).replaceAll("\\n", "\n");
         const image = interaction.options.getAttachment("image");
         const role = interaction.options.getRole("role");
+        const author = interaction.options.getUser("author") ?? interaction.user;
 
         const { channel } = interaction;
         if (!channel || !channel.isSendable()){
@@ -75,8 +80,8 @@ export default {
         const gw = {
             guildId: interaction.guildId ?? "",
             channelId: channel.id,
-            hostId: interaction.user.id,
-            hostName: interaction.user.displayName,
+            hostId: author.id,
+            hostName: author.displayName,
             description,
             image: imageName,
             requiredRoleId: role?.id ?? null,
@@ -102,7 +107,7 @@ export default {
 
         await giveawayDb.set(message.id, gw);
 
-        Log.done(`Giveaway ${message.id} started by ${interaction.user.displayName}, drawn at ${new Date(gw.endsAt).toISOString()}`);
+        Log.done(`Giveaway ${message.id} started by ${interaction.user.displayName} (host: ${author.displayName}), drawn at ${new Date(gw.endsAt).toISOString()}`);
 
         return await interaction.editReply({
             content: `Giveaway started! Winner is drawn <t:${Math.floor(gw.endsAt / 1000)}:F>.`,

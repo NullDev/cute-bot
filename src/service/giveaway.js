@@ -161,7 +161,7 @@ export const buildGiveawayEmbed = function(gw){
     const embed = new EmbedBuilder()
         .setColor(defaults.embed_color)
         .setTitle("🎁┃Giveaway")
-        .setDescription(`### Giveaway time, cuties!\n${gw.description}\n\n${status}${requirement}\n👥┃Participants: **${gw.participants.length}**`)
+        .setDescription(`### Giveaway time, cuties!\n${gw.description}\n\n🎉┃Giveaway by <@${gw.hostId}>\n${status}${requirement}\n👥┃Participants: **${gw.participants.length}**`)
         .setFooter({
             text: `Hosted by ${gw.hostName}`,
             iconURL: "attachment://icon.png",
