@@ -181,7 +181,7 @@ const messageCreate = async function(message){
                 (name.toLowerCase() === "cute bot" || name.toLowerCase() === "cutebot")
                     ? await message.reply("Nuh uh, that's my name :rage:").catch(() => {})
                     : await message.reply({
-                        content: `Hello ${name}, I am Cute Bot. :wave:`,
+                        content: `Hellow ${name}, I am Cute Bot uwu`,
                         allowedMentions: {
                             parse: [],
                             roles: [],
