@@ -71,7 +71,7 @@ const sendErrorMessage = async function(interaction, message){
  * Handle verification
  *
  * @param {import("discord.js").ModalSubmitInteraction} interaction
- * @return {Promise<import("discord.js").Message>}
+ * @return {Promise<import("discord.js").Message|null>}
  */
 const handleVerification = async function(interaction){
     if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
