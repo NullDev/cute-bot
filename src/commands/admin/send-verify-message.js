@@ -93,7 +93,7 @@ export default {
                         {
                             type: 2,
                             style: 3,
-                            label: "Verify",
+                            label: "📋 Verify",
                             custom_id: "verify",
                         },
                     ],
