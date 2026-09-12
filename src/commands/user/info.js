@@ -53,7 +53,7 @@ export default {
 
         const embed = {
             title: "Bot Info",
-            description: "Discord bot for TUT Server. Math utils and daily Math Challenge helpers\nTo request features and report bugs, [go here](<https://github.com/NullDev/Cute-Bot/issues>).",
+            description: "Discord bot for the [cute] Krunker Clan",
             color: 2518621,
             thumbnail: {
                 url: botAvatar,
@@ -66,7 +66,7 @@ export default {
                 },
                 {
                     name: "Source Code :scroll:",
-                    value: "[NullDev/Cute-Bot](https://github.com/NullDev/Cute-Bot)",
+                    value: "[NullDev/Cute-Bot](https://github.com/NullDev/cute-bot) (private)",
                     inline: true,
                 },
                 { name: "\u200b", value: "\u200b", inline: true },
