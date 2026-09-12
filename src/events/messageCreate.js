@@ -69,9 +69,7 @@ const messageCreate = async function(message){
         });
     }
 
-    // @TODO: Reply is disabled while learning
-    // eslint-disable-next-line no-constant-condition
-    if (message.mentions.has(message.client.user) && false){
+    if (message.mentions.has(message.client.user)){
         if (message.content.trim() === `<@!${message.client.user?.id}>`) return;
 
         const text = cleanMsg(message);
