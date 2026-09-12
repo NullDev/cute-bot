@@ -1,0 +1,47 @@
+{
+  "name": "cute-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Discord bot for the [cute] clan",
+  "main": "src/app.js",
+  "engines": {
+    "node": ">=24.18.0"
+  },
+  "scripts": {
+    "start:dev": "npm run lint && cross-env NODE_ENV=development node src/app.js",
+    "start:prod": "cross-env NODE_ENV=production node src/app.js",
+    "start": "npm run start:dev",
+    "lint": "eslint . --ignore-pattern .venv",
+    "lint:fix": "eslint . --fix --ignore-pattern .venv",
+    "generate-config": "node scripts/generate-config.js",
+    "pull-and-restart": "node scripts/pull-and-restart.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NullDev/Cute-Bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/NullDev/Cute-Bot/issues"
+  },
+  "homepage": "https://github.com/NullDev/Cute-Bot#readme",
+  "author": "NullDev",
+  "license": "AGPL-3.0-only",
+  "devDependencies": {
+    "@babel/core": "^8.0.5",
+    "@babel/eslint-parser": "^8.0.5",
+    "cross-env": "^10.1.0",
+    "eslint": "^10.10.0"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.0.3": true
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "check-dependencies": "^2.0.0",
+    "discord-hybrid-sharding": "^3.0.1",
+    "discord.js": "^14.27.0",
+    "node-cron": "^4.6.0",
+    "quick.db": "^9.1.7"
+  }
+}
