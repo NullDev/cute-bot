@@ -33,6 +33,8 @@ export class MessageLearner {
             ts INTEGER
         )`);
 
+        this.db.exec("CREATE INDEX IF NOT EXISTS idx_messages_channel_ts ON messages (channelId, ts)");
+
         this.db.exec(`CREATE TABLE IF NOT EXISTS pairs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             parentKey TEXT,
@@ -58,6 +60,19 @@ export class MessageLearner {
             || /\$(?:\\.|[^$\\])+\$/.test(s)
             || /\\\[(?:\\.|[^\\])+\\\]/.test(s)
         );
+    }
+
+    /**
+     * Return true if the content looks like a command for another bot (e.g. "g.p", "t!rank", ";play").
+     * These are noise for conversational learning and must never be learned as parent or reply.
+     *
+     * @param {string} s
+     * @return {boolean}
+     * @memberof MessageLearner
+     */
+    isBotCommand(s){
+        if (!s) return false;
+        return /^(?:g\.|t!|m!|o-|t-|;|!|\$)[a-z0-9]/i.test(s.trim());
     }
 
     /**
@@ -202,6 +217,7 @@ export class MessageLearner {
     async learn(msg){
         if (!msg || !msg.id) return;
         if (this.isLatex(msg.content)) return;
+        if (this.isBotCommand(msg.content)) return;
 
         const ts = msg.createdTimestamp ?? Date.now();
         const clean = this.cleanText(msg.content);
@@ -232,19 +248,16 @@ export class MessageLearner {
         ).run(msg.id, msg.channelId, clean, msg.authorId, msg.replyToId ?? null, ts);
 
         let parentContent = null;
-        let parentTs = null;
 
         if (msg.replyToId){
             const row = this.db
-                .prepare("SELECT content, ts FROM messages WHERE id = ?")
+                .prepare("SELECT content FROM messages WHERE id = ?")
                 .get(msg.replyToId);
 
             // @ts-ignore
             if (row && row.content){
                 // @ts-ignore
                 parentContent = row.content;
-                // @ts-ignore
-                parentTs = row.ts ?? null;
             }
         }
         else if (msg.channelId){
@@ -252,10 +265,10 @@ export class MessageLearner {
                 .prepare(
                     `SELECT content, ts
                      FROM messages
-                     WHERE channelId = ? AND authorId != ? AND id != ?
+                     WHERE channelId = ? AND authorId != ? AND id != ? AND ts <= ?
                      ORDER BY ts DESC LIMIT 1`,
                 )
-                .get(msg.channelId, msg.authorId, msg.id);
+                .get(msg.channelId, msg.authorId, msg.id, ts);
 
             // @ts-ignore
             if (row && row.content){
@@ -265,18 +278,12 @@ export class MessageLearner {
                 if (this.shouldPairAdjacent(row.content, clean, dt)){
                     // @ts-ignore
                     parentContent = row.content;
-                    // @ts-ignore
-                    parentTs = row.ts ?? null;
                 }
             }
         }
 
         if (parentContent){
             this.addPair(parentContent, clean, ts);
-            if (parentTs && parentTs > ts){
-                // if parent is newer, update its timestamp to keep it in the lookback window longer
-                this.db.prepare("UPDATE messages SET ts = ? WHERE content = ?").run(ts, parentContent);
-            }
         }
 
         this.lastMsgByChannel.set(msg.channelId, {
@@ -297,6 +304,7 @@ export class MessageLearner {
     crawlLearn(msg){
         if (!msg?.id) return { inserted: false, paired: false };
         if (this.isLatex(msg.content)) return { inserted: false, paired: false };
+        if (this.isBotCommand(msg.content)) return { inserted: false, paired: false };
 
         const clean = this.cleanText(msg.content);
         if (!clean) return { inserted: false, paired: false };
@@ -328,9 +336,9 @@ export class MessageLearner {
             const row = this.db.prepare(
                 `SELECT content, ts
                  FROM messages
-                 WHERE channelId = ? AND authorId != ? AND id != ?
+                 WHERE channelId = ? AND authorId != ? AND id != ? AND ts <= ?
                  ORDER BY ts DESC LIMIT 1`,
-            ).get(msg.channelId, msg.authorId, msg.id);
+            ).get(msg.channelId, msg.authorId, msg.id, ts);
 
             // @ts-ignore
             if (row?.content){
