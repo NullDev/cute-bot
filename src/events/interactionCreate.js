@@ -2,6 +2,8 @@ import path from "node:path";
 import { QuickDB } from "quick.db";
 import sendVerifyModal from "../service/sendVerifyModal.js";
 import handleVerification from "../service/handleVerification.js";
+import handleGiveawayJoin from "../service/handleGiveawayJoin.js";
+import handleGiveawayParticipants from "../service/handleGiveawayParticipants.js";
 import Log from "../util/log.js";
 
 // ========================= //
@@ -60,6 +62,8 @@ const handleModalSubmit = async function(interaction){
  */
 const handleButtonInteraction = async function(interaction){
     if (interaction.customId === "verify") await sendVerifyModal(interaction);
+    if (interaction.customId === "giveaway_join") await handleGiveawayJoin(interaction);
+    if (interaction.customId.startsWith("giveaway_participants")) await handleGiveawayParticipants(interaction);
 };
 
 /**
