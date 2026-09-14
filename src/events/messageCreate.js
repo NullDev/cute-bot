@@ -78,7 +78,7 @@ const messageCreate = async function(message){
         const botChannelId = config.ids.bot_channel;
         // @ts-ignore
         const isOwner = config.discord.bot_owner_ids.includes(message.author.id);
-        const isLimited = !isOwner && !!botChannelId && message.channelId !== botChannelId;
+        const isLimited = false; // !isOwner && !!botChannelId && message.channelId !== botChannelId;
 
         /** @type {"allow" | "redirect"} */
         let decision = "allow";
