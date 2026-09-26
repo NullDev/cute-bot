@@ -88,6 +88,16 @@ const messageCreate = async function(message){
             decision = d;
         }
 
+        // Only ever allow the AI reply to ping the user who prompted it.
+        // Never let model output trigger @everyone/@here, role, or other user mentions.
+        /** @type {import("discord.js").MessageMentionOptions} */
+        const allowedMentions = {
+            parse: [],
+            roles: [],
+            users: [message.author.id],
+            repliedUser: true,
+        };
+
         /** @type {import("discord.js").TextBasedChannel} */
         let replyChannel = message.channel;
         if (decision === "redirect"){
@@ -137,11 +147,11 @@ const messageCreate = async function(message){
             if (decision === "redirect" && "send" in replyChannel){
                 await replyChannel.send({
                     content: `<@${message.author.id}> ${reply}`,
-                    allowedMentions: { users: [message.author.id] },
+                    allowedMentions,
                 });
             }
             else {
-                await message.reply(reply);
+                await message.reply({ content: reply, allowedMentions });
             }
         }
         catch (error){
@@ -151,11 +161,11 @@ const messageCreate = async function(message){
             if (decision === "redirect" && "send" in replyChannel){
                 await replyChannel.send({
                     content: `<@${message.author.id}> ${errText}`,
-                    allowedMentions: { users: [message.author.id] },
+                    allowedMentions,
                 }).catch(() => {});
             }
             else {
-                await message.reply(errText);
+                await message.reply({ content: errText, allowedMentions }).catch(() => {});
             }
         }
 
