@@ -2,7 +2,7 @@
 // = Copyright (c) NullDev = //
 // ========================= //
 
-const LIMIT = 10;
+const LIMIT = 4;
 const WINDOW_MS = 60 * 60 * 1000;
 
 /**
