@@ -73,3 +73,24 @@ test("migrateQuickDb links resolvable names, reports the rest, keeps existing li
     assert.deepEqual(result.conflicts, [{ discordId: "c", username: "qari99", playerName: "qari99", takenBy: "keep" }]);
     assert.equal(getLinkByDiscord(db, "g", "keep").playerId, 200);
 });
+
+test("migrateQuickDb rethrows an api failure and keeps the entries linked so far", async() => {
+    const db = createClanDb(":memory:");
+    const inner = fakeApi(PLAYERS);
+    let calls = 0;
+    const api = {
+        getPlayer: async name => {
+            if (++calls === 2) throw new Error("gapi down");
+            return inner.getPlayer(name);
+        },
+    };
+    await assert.rejects(
+        migrateQuickDb(db, api, "g", [
+            { discordId: "a", username: "nulping" },
+            { discordId: "b", username: "qari99" },
+        ]),
+        e => e.message === "gapi down" && e.partial.linked.length === 1,
+    );
+    assert.equal(getLinkByDiscord(db, "g", "a").playerId, 7610743);
+    assert.equal(getLinkByDiscord(db, "g", "b"), null);
+});

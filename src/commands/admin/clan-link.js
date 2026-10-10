@@ -42,7 +42,13 @@ export default {
         if (sub === "set"){
             const user = interaction.options.getUser("user", true);
             const ign = interaction.options.getString("ign", true);
-            const resolved = await resolveIgn(api, ign).catch(() => null);
+            let resolved;
+            try {
+                resolved = await resolveIgn(api, ign);
+            }
+            catch {
+                return await interaction.editReply("The Krunker API is unavailable right now, please try again later.");
+            }
             if (!resolved) return await interaction.editReply(`No Krunker player named \`${ign}\`.`);
             const res = linkPlayer(db, { guildId, discordId: user.id, playerId: resolved.playerId, playerName: resolved.playerName, source: "admin" });
             if (!res.ok) return await interaction.editReply(`\`${resolved.playerName}\` is already linked to <@${res.discordId}>. Remove that link first.`);
@@ -67,7 +73,14 @@ export default {
         const entries = Object.entries(legacy)
             .filter(([key, value]) => key.startsWith("user-") && value?.username)
             .map(([key, value]) => ({ discordId: key.slice("user-".length), username: String(value.username) }));
-        const result = await migrateQuickDb(db, api, guildId, entries);
+        let result;
+        try {
+            result = await migrateQuickDb(db, api, guildId, entries);
+        }
+        catch (e){
+            const linkedSoFar = /** @type {any} */ (e)?.partial?.linked?.length ?? 0;
+            return await interaction.editReply(`The Krunker API became unavailable during the migration; ${linkedSoFar} entries were linked so far, run the command again later.`);
+        }
         const lines = [
             `Linked ${result.linked.length}, unresolved ${result.unresolved.length}, conflicts ${result.conflicts.length}.`,
             "",

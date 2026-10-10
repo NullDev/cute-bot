@@ -143,7 +143,15 @@ export const handleApplicationSubmit = async function(interaction){
     const db = getClanDb();
     const answers = Object.fromEntries(FIELDS.map(f => [f.id, interaction.fields.getTextInputValue(f.id)?.trim() ?? ""]));
 
-    const profile = await api.getPlayer(answers.ign).catch(() => null);
+    /** @type {any} */
+    let profile;
+    try {
+        profile = await api.getPlayer(answers.ign);
+    }
+    catch {
+        await whisper(interaction, "The Krunker API is unavailable right now, please try again later.");
+        return;
+    }
     if (!profile?.player_id){
         const suggestions = await suggestIgns(api, answers.ign);
         const hint = suggestions.length ? ` Did you mean: ${suggestions.map(s => `\`${s}\``).join(", ")}?` : "";

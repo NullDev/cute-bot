@@ -78,7 +78,13 @@ const handleVerification = async function(interaction){
 
     const username = interaction.fields.getTextInputValue("username");
 
-    const resolved = await resolveIgn(api, username).catch(() => null);
+    let resolved;
+    try {
+        resolved = await resolveIgn(api, username);
+    }
+    catch {
+        return await sendErrorMessage(interaction, "The Krunker API is unavailable right now, please try again later.");
+    }
     if (!resolved){
         const suggestions = await suggestIgns(api, username);
         const hint = suggestions.length ? `\nDid you mean: ${suggestions.map(s => `\`${s}\``).join(", ")}?` : "";

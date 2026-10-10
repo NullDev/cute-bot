@@ -127,6 +127,8 @@ export const listLinks = function(db, guildId){
 
 /**
  * One-off migration of the quick.db usernames into the players table
+ * An API error aborts the run and is rethrown with the entries processed so far attached as `error.partial`
+ * (same shape as the return value); those links are kept
  *
  * @param {import("better-sqlite3").Database} db
  * @param {import("./krunkerApi.js").KrunkerApi} api
@@ -140,7 +142,15 @@ export const migrateQuickDb = async function(db, api, guildId, entries){
     const conflicts = [];
     for (const { discordId, username } of entries){
         if (getLinkByDiscord(db, guildId, discordId)) continue;
-        const resolved = await resolveIgn(api, username).catch(() => null);
+        let resolved;
+        try {
+            resolved = await resolveIgn(api, username);
+        }
+        catch (e){
+            const error = e instanceof Error ? e : new Error(String(e));
+            /** @type {any} */ (error).partial = { linked, unresolved, conflicts };
+            throw error;
+        }
         if (!resolved){
             unresolved.push({ discordId, username });
             continue;
