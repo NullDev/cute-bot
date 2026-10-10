@@ -297,7 +297,14 @@ export const handleApplicationDecision = async function(interaction){
     }
 
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-    await decide(interaction, app, "accepted", null);
+    try {
+        await decide(interaction, app, "accepted", null);
+    }
+    catch (e){
+        Log.warn(`[CLAN] Could not accept application #${id}: ${e instanceof Error ? e.message : String(e)}`);
+        await whisper(interaction, "Could not record the decision: " + (e instanceof Error ? e.message : String(e)));
+        return;
+    }
     await whisper(interaction, `Accepted #${id}.`);
 };
 
@@ -324,6 +331,13 @@ export const handleRejectModal = async function(interaction){
         return;
     }
     const reason = interaction.fields.getTextInputValue("reason")?.trim() || null;
-    await decide(interaction, app, "rejected", reason);
+    try {
+        await decide(interaction, app, "rejected", reason);
+    }
+    catch (e){
+        Log.warn(`[CLAN] Could not reject application #${id}: ${e instanceof Error ? e.message : String(e)}`);
+        await whisper(interaction, "Could not record the decision: " + (e instanceof Error ? e.message : String(e)));
+        return;
+    }
     await whisper(interaction, `Rejected #${id}.`);
 };
