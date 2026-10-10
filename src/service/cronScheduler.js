@@ -3,6 +3,7 @@ import Log from "../util/log.js";
 import LogHandler from "../crons/removeOldLogs.js";
 import { cleanupExpired as cleanupAiRateLimit } from "../ai/aiRateLimit.js";
 import drawGiveaways from "../crons/drawGiveaways.js";
+import clanDaily from "../crons/clanDaily.js";
 import { TIMEZONE, DRAW_HOUR, DRAW_MINUTE } from "./giveaway.js";
 
 // ========================= //
@@ -30,12 +31,18 @@ const scheduleCrons = async function(client){
         cleanupAiRateLimit();
     });
 
+    // daily clan snapshot + role sync, 03:30 UTC (turf day rolled over at 00:00 UTC)
+    cron.schedule("30 3 * * *", async() => {
+        await clanDaily(client);
+    }, { timezone: "UTC" });
+
     const cronCount = cron.getTasks().size;
     Log.done("Scheduled " + cronCount + " Crons.");
 
     // start jobs on init
     await LogHandler.removeOldLogs();
     await drawGiveaways(client);
+    await clanDaily(client);
 };
 
 export default scheduleCrons;
