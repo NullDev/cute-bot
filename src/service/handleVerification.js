@@ -5,6 +5,7 @@ import gLogger from "./gLogger.js";
 import { config } from "../../config/config.js";
 import { api } from "./clan/krunkerApi.js";
 import { getClanDb } from "./clan/db.js";
+import { syncOneMember } from "./clan/sync.js";
 import { resolveIgn, suggestIgns, linkPlayer, unlinkDiscord, getLinkByDiscord } from "./clan/identity.js";
 
 // ========================= //
@@ -104,6 +105,8 @@ const handleVerification = async function(interaction){
         unlinkDiscord(db, interaction.guildId, interaction.user.id);
         return await sendErrorMessage(interaction, "Could not give you the verified role, please try again or ask a mod.");
     }
+
+    await syncOneMember(gMember).catch(() => null);
 
     return await sendSuccessMessage(interaction, resolved.playerName);
 };
