@@ -47,6 +47,16 @@ test("weak active member lands in watch or kick with the lowest terms as reasons
     assert.equal(r.reasons.length, 2);
 });
 
+test("reasons skip the unknown delta and not ranked terms", () => {
+    const r = scoreMember({ ...base, level: 15, kdr: 0.5, kpg: 2, s7: 5000, turf14Kills: 10, turf14Games: 2, score14Delta: null, rankedRank: 0 }, refs, DEFAULT_REVIEW);
+    assert.notEqual(r.verdict, "keep");
+    assert.equal(r.reasons.length, 2);
+    for (const reason of r.reasons){
+        assert.ok(!reason.includes("unknown"), reason);
+        assert.ok(!reason.includes("not ranked"), reason);
+    }
+});
+
 test("computeRefs takes medians over active members", () => {
     const refsOut = computeRefs([
         { ...base, s7: 10, turf14Kills: 1, turf14Games: 1 },

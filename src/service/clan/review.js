@@ -114,7 +114,8 @@ export const scoreMember = function(row, refs, cfg){
         if (total < cfg.thresholds.kick) verdict = "kick";
         else if (total < cfg.thresholds.watch) verdict = "watch";
         else verdict = "keep";
-        const weakest = [...terms].sort((a, b) => a.value - b.value).slice(0, 2).map(t => t.text);
+        const candidates = terms.filter(t => !(t.name === "delta" && row.score14Delta === null) && !(t.name === "rank" && row.rankedRank === 0));
+        const weakest = [...candidates].sort((a, b) => a.value - b.value).slice(0, 2).map(t => t.text);
         if (!row.linked) weakest[1] = "not linked on Discord";
         reasons = verdict === "keep" ? [] : weakest;
     }
