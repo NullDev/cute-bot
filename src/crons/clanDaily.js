@@ -5,6 +5,7 @@ import { getClanDb } from "../service/clan/db.js";
 import { fetchRoster } from "../service/clan/roster.js";
 import { runSnapshot, backfillTurf, hasSnapshotForDay } from "../service/clan/snapshot.js";
 import { runClanSync } from "../service/clan/sync.js";
+import { checkPendingJoins } from "../service/clan/pendingJoins.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -56,6 +57,7 @@ const clanDaily = async function(client, { force = false } = {}){
     await step("turf", () => backfillTurf(db, api, config.clan.id, from, day));
 
     for (const guild of client.guilds.cache.values()){
+        await step(`pending joins ${guild.id}`, () => checkPendingJoins(client, db, roster, guild.id));
         await step(`sync ${guild.id}`, () => runClanSync(client, guild.id));
     }
 };
