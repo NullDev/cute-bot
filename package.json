@@ -14,6 +14,7 @@
     "start": "npm run start:dev",
     "lint": "eslint . --ignore-pattern .venv",
     "lint:fix": "eslint . --fix --ignore-pattern .venv",
+    "test": "node --test test/*.test.js",
     "generate-config": "node scripts/generate-config.js",
     "pull-and-restart": "node scripts/pull-and-restart.js"
   },
