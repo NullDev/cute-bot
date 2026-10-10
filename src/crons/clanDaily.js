@@ -33,6 +33,7 @@ const step = async function(name, fn){
 
 /**
  * Daily clan maintenance: snapshot, turf, sync
+ * The snapshot is skipped when today's already exists; turf and sync always run
  *
  * @param {import("../service/client.js").default} client
  * @param {{ force?: boolean }} [options] force re-snapshots even when today's exists
@@ -40,17 +41,15 @@ const step = async function(name, fn){
 const clanDaily = async function(client, { force = false } = {}){
     const db = getClanDb();
     const day = turfDay();
-    if (!force && hasSnapshotForDay(db, day)){
-        Log.info(`[CLAN] Snapshot for day ${day} exists, skipping`);
-        return;
-    }
-
     const roster = await step("roster", () => fetchRoster(db, api, { clanName: config.clan.name }));
     if (!roster) return;
 
-    for (const guild of client.guilds.cache.values()){
-        await step(`snapshot ${guild.id}`, () => runSnapshot(db, api, roster, { guildId: guild.id, day }));
+    if (force || !hasSnapshotForDay(db, day)){
+        for (const guild of client.guilds.cache.values()){
+            await step(`snapshot ${guild.id}`, () => runSnapshot(db, api, roster, { guildId: guild.id, day }));
+        }
     }
+    else Log.info(`[CLAN] Snapshot for day ${day} exists, skipping`);
 
     const turfEmpty = !db.prepare("select 1 from turf_days limit 1").get();
     const from = turfEmpty ? day - TURF_BACKFILL_DAYS + 1 : day - 1;
