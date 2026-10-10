@@ -1,17 +1,13 @@
-import path from "node:path";
-import { QuickDB } from "quick.db";
 import { SlashCommandBuilder, InteractionContextType } from "discord.js";
 import defaults from "../../util/defaults.js";
+import { getClanDb } from "../../service/clan/db.js";
+import { getLinkByDiscord } from "../../service/clan/identity.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
 // ========================= //
 
 const commandName = import.meta.url.split("/").pop()?.split(".").shift() ?? "";
-
-const db = new QuickDB({
-    filePath: path.resolve("./data/guild_data.sqlite"),
-});
 
 export default {
     data: new SlashCommandBuilder()
@@ -37,8 +33,7 @@ export default {
             return;
         }
 
-        const ign = await db.get(`guild-${interaction.guildId}.user-${username.id}.username`).catch(() => null);
-
+        const ign = getLinkByDiscord(getClanDb(), interaction.guildId ?? "", username.id)?.playerName ?? null;
 
         const embed = {
             color: defaults.embed_color,

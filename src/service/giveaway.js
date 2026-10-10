@@ -3,6 +3,8 @@ import { EmbedBuilder } from "discord.js";
 import { QuickDB } from "quick.db";
 import defaults from "../util/defaults.js";
 import { config } from "../../config/config.js";
+import { getClanDb } from "./clan/db.js";
+import { getLinkByDiscord } from "./clan/identity.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -31,10 +33,6 @@ export const giveawayDb = /** @type {QuickDB<Giveaway>} */ (new QuickDB({
     filePath: path.resolve("./data/guild_data.sqlite"),
     table: "giveaways",
 }));
-
-const guildDb = new QuickDB({
-    filePath: path.resolve("./data/guild_data.sqlite"),
-});
 
 /**
  * Get the wall clock parts of a date in TIMEZONE
@@ -118,7 +116,7 @@ export const withLock = function(key, fn){
  * @return {Promise<string | null>}
  */
 export const getIgn = async function(guildId, userId){
-    return (await guildDb.get(`guild-${guildId}.user-${userId}.username`).catch(() => null)) || null;
+    return getLinkByDiscord(getClanDb(), guildId, userId)?.playerName ?? null;
 };
 
 /**
