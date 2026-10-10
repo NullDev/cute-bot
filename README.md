@@ -9,6 +9,18 @@
 
 Discord bot for the Cute Krunker Clan.
 
+- Links Discord users to Krunker player ids via the verify button (`/clan-link` for manual fixes).
+- Syncs the clan roles with the in-game roster every day at 03:30 UTC (`/clan-sync` for a manual or dry run).
+- Snapshots every member daily and rates them with `/clan-review`.
+- Takes clan applications through a button + modal, reviewed in a channel with Accept / Reject.
+
+#### Rollout
+
+1. Deploy with `clan.sync_enabled: false`.
+2. Run `/clan-link migrate` and ask the unresolved users to re-verify.
+3. Run `/clan-sync dry_run:true` and read the "Had clan roles without a link" field.
+4. Set `sync_enabled: true` in `config.custom.js` and restart.
+
 <hr>
 
 ## :diamond_shape_with_a_dot_inside: Feature requests & Issues
@@ -55,5 +67,15 @@ Once the config has been copied like described in [Step 4](#wrench-setup), it ca
 | ids: <br> `bot_channel` | ID of the bot channel | string | N/A |
 | ids: <br> `general_channel` | ID of the general channel | string | N/A |
 | ai_included_channels | Array of channel IDs that the AI should learn from | string-array | [] |
+| ids: <br> `log_channel` | ID of the log channel (sync reports go here) | string | N/A |
+| ids: clan: <br> `recruit`, `soldier`, `captain` | Clan rank roles, applied cumulatively from the in-game rank | string | N/A |
+| ids: clan: <br> `applications_role` | Role that may accept or reject applications | string | N/A |
+| ids: clan: <br> `applications_channel` | Channel where applications are posted and decided | string | N/A |
+| clan: <br> `id`, `name` | Krunker clan id and tag | number, string | 561461, "cute" |
+| clan: <br> `sync_enabled` | Enable the automatic daily role sync; keep false until the migration and a dry run are done | boolean | false |
+| clan: <br> `target_size` | Member count the review aims for | number | 100 |
+| clan: <br> `cooldown_days` | Days before a rejected applicant may apply again | number | 7 |
+| clan: <br> `join_reminder_days`, `join_expire_days` | Days until an accepted applicant is reminded / expired for not joining in game | number | 3, 14 |
+| clan: <br> `review` | Weights, protection rules and thresholds of `/clan-review` | object | see template |
 
 <hr>

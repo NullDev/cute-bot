@@ -1,14 +1,10 @@
-import path from "node:path";
 import { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags } from "discord.js";
-import { QuickDB } from "quick.db";
+import { getClanDb } from "./clan/db.js";
+import { getLinkByDiscord } from "./clan/identity.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
 // ========================= //
-
-const db = new QuickDB({
-    filePath: path.resolve("./data/guild_data.sqlite"),
-});
 
 /**
  * Send the verification modal
@@ -17,8 +13,7 @@ const db = new QuickDB({
  * @return {Promise<any>}
  */
 const sendVerifyModal = async function(interaction){
-    const existingUsername = await db.get(`guild-${interaction.guildId}.user-${interaction.user.id}.username`).catch(() => null);
-    if (existingUsername){
+    if (interaction.guildId && getLinkByDiscord(getClanDb(), interaction.guildId, interaction.user.id)){
         return await interaction.reply({
             content: "You are already verified, silly",
             flags: [MessageFlags.Ephemeral],
