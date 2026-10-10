@@ -108,11 +108,20 @@ export const sendApplicationModal = async function(interaction){
     const link = getLinkByDiscord(db, interaction.guildId, interaction.user.id);
     if (link){
         const last = db.prepare("select in_clan from snapshots where player_id = ? order by day desc limit 1").get(link.playerId);
-        if (last?.in_clan) return await whisper(interaction, "You are already in the clan, silly");
+        if (last?.in_clan){
+            await whisper(interaction, "You are already in the clan, silly");
+            return;
+        }
     }
     const check = canApply(db, { guildId: interaction.guildId, discordId: interaction.user.id, playerId: link?.playerId ?? -1, cooldownDays: config.clan.cooldown_days });
-    if (!check.ok && check.reason === "pending") return await whisper(interaction, "You already have a pending application. Please wait for a decision.");
-    if (!check.ok && check.reason === "cooldown") return await whisper(interaction, `You can apply again <t:${Math.floor((check.until ?? 0) / 1000)}:R>.`);
+    if (!check.ok && check.reason === "pending"){
+        await whisper(interaction, "You already have a pending application. Please wait for a decision.");
+        return;
+    }
+    if (!check.ok && check.reason === "cooldown"){
+        await whisper(interaction, `You can apply again <t:${Math.floor((check.until ?? 0) / 1000)}:R>.`);
+        return;
+    }
 
     const modal = new ModalBuilder().setCustomId(APPLY_MODAL).setTitle("Apply to [cute]");
     for (const f of FIELDS){
@@ -120,7 +129,7 @@ export const sendApplicationModal = async function(interaction){
         if (link && f.id === "ign") input.setValue(link.playerName);
         modal.addComponents(/** @type {ActionRowBuilder<import("discord.js").ModalActionRowComponentBuilder>} */ (new ActionRowBuilder()).addComponents(input));
     }
-    return await interaction.showModal(modal);
+    await interaction.showModal(modal);
 };
 
 /**
@@ -138,29 +147,51 @@ export const handleApplicationSubmit = async function(interaction){
     if (!profile?.player_id){
         const suggestions = await suggestIgns(api, answers.ign);
         const hint = suggestions.length ? ` Did you mean: ${suggestions.map(s => `\`${s}\``).join(", ")}?` : "";
-        return await whisper(interaction, `There is no Krunker player named \`${answers.ign}\`.${hint}`);
+        await whisper(interaction, `There is no Krunker player named \`${answers.ign}\`.${hint}`);
+        return;
     }
 
     const roster = await fetchRoster(db, api, { clanName: config.clan.name }).catch(() => null);
-    if (roster && rosterByPlayerId(roster).has(profile.player_id)) return await whisper(interaction, `\`${profile.player_name}\` is already in the clan. If that is you, press Verify instead.`);
+    if (roster && rosterByPlayerId(roster).has(profile.player_id)){
+        await whisper(interaction, `\`${profile.player_name}\` is already in the clan. If that is you, press Verify instead.`);
+        return;
+    }
 
     const check = canApply(db, { guildId: interaction.guildId, discordId: interaction.user.id, playerId: profile.player_id, cooldownDays: config.clan.cooldown_days });
     if (!check.ok){
-        if (check.reason === "pending") return await whisper(interaction, "You already have a pending application.");
-        if (check.reason === "cooldown") return await whisper(interaction, `You can apply again <t:${Math.floor((check.until ?? 0) / 1000)}:R>.`);
-        return await whisper(interaction, `The IGN \`${profile.player_name}\` is linked to <@${check.discordId}>. If that is wrong, ask a mod.`);
+        if (check.reason === "pending"){
+            await whisper(interaction, "You already have a pending application.");
+            return;
+        }
+        if (check.reason === "cooldown"){
+            await whisper(interaction, `You can apply again <t:${Math.floor((check.until ?? 0) / 1000)}:R>.`);
+            return;
+        }
+        await whisper(interaction, `The IGN \`${profile.player_name}\` is linked to <@${check.discordId}>. If that is wrong, ask a mod.`);
+        return;
     }
 
     const channel = await interaction.guild.channels.fetch(config.ids.clan.applications_channel).catch(() => null);
-    if (!channel?.isSendable()) return await whisper(interaction, "The applications channel is not configured. Please tell a mod.");
+    if (!channel?.isSendable()){
+        await whisper(interaction, "The applications channel is not configured. Please tell a mod.");
+        return;
+    }
 
     const id = createApplication(db, { guildId: interaction.guildId, discordId: interaction.user.id, playerId: profile.player_id, playerName: profile.player_name, answers });
     const app = /** @type {import("./applications.js").Application} */ (getApplication(db, id));
-    const message = await channel.send({ embeds: [buildApplicationEmbed(app, profile, null)], components: [decisionComponents(id, false)] });
-    setApplicationMessage(db, id, channel.id, message.id);
+    try {
+        const message = await channel.send({ embeds: [buildApplicationEmbed(app, profile, null)], components: [decisionComponents(id, false)] });
+        setApplicationMessage(db, id, channel.id, message.id);
+    }
+    catch (error){
+        db.prepare("delete from applications where id = ?").run(id);
+        Log.error("[CLAN] Could not post application: ", error instanceof Error ? error : new Error(String(error)));
+        await whisper(interaction, "Could not post your application, please try again later or tell a mod.");
+        return;
+    }
 
     Log.info(`[CLAN] Application #${id} by ${interaction.user.tag} as ${profile.player_name}`);
-    return await whisper(interaction, `Your application as \`${profile.player_name}\` was submitted. You will get a DM once it is reviewed.`);
+    await whisper(interaction, `Your application as \`${profile.player_name}\` was submitted. You will get a DM once it is reviewed.`);
 };
 
 /**
@@ -232,24 +263,34 @@ const decide = async function(interaction, app, status, reason){
  */
 export const handleApplicationDecision = async function(interaction){
     const { member } = /** @type {{ member: import("discord.js").GuildMember | null }} */ (interaction);
-    if (!mayDecide(member, interaction.channelId)) return await whisper(interaction, "You are not allowed to decide applications.");
+    if (!mayDecide(member, interaction.channelId)){
+        await whisper(interaction, "You are not allowed to decide applications.");
+        return;
+    }
 
     const accept = interaction.customId.startsWith(ACCEPT_PREFIX);
     const id = Number(interaction.customId.slice(accept ? ACCEPT_PREFIX.length : REJECT_PREFIX.length));
     const app = getApplication(getClanDb(), id);
-    if (!app) return await whisper(interaction, "Unknown application.");
-    if (app.status !== "pending") return await whisper(interaction, `Already ${app.status}.`);
+    if (!app){
+        await whisper(interaction, "Unknown application.");
+        return;
+    }
+    if (app.status !== "pending"){
+        await whisper(interaction, `Already ${app.status}.`);
+        return;
+    }
 
     if (!accept){
         const modal = new ModalBuilder().setCustomId(REJECT_MODAL_PREFIX + id).setTitle(`Reject ${app.playerName}`);
         const reason = new TextInputBuilder().setCustomId("reason").setLabel("Reason (optional, sent to the applicant)").setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(500);
         modal.addComponents(/** @type {ActionRowBuilder<import("discord.js").ModalActionRowComponentBuilder>} */ (new ActionRowBuilder()).addComponents(reason));
-        return await interaction.showModal(modal);
+        await interaction.showModal(modal);
+        return;
     }
 
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
     await decide(interaction, app, "accepted", null);
-    return await whisper(interaction, `Accepted #${id}.`);
+    await whisper(interaction, `Accepted #${id}.`);
 };
 
 /**
@@ -260,12 +301,21 @@ export const handleApplicationDecision = async function(interaction){
 export const handleRejectModal = async function(interaction){
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
     const { member } = /** @type {{ member: import("discord.js").GuildMember | null }} */ (interaction);
-    if (!mayDecide(member, interaction.channelId ?? "")) return await whisper(interaction, "You are not allowed to decide applications.");
+    if (!mayDecide(member, interaction.channelId ?? "")){
+        await whisper(interaction, "You are not allowed to decide applications.");
+        return;
+    }
     const id = Number(interaction.customId.slice(REJECT_MODAL_PREFIX.length));
     const app = getApplication(getClanDb(), id);
-    if (!app) return await whisper(interaction, "Unknown application.");
-    if (app.status !== "pending") return await whisper(interaction, `Already ${app.status}.`);
+    if (!app){
+        await whisper(interaction, "Unknown application.");
+        return;
+    }
+    if (app.status !== "pending"){
+        await whisper(interaction, `Already ${app.status}.`);
+        return;
+    }
     const reason = interaction.fields.getTextInputValue("reason")?.trim() || null;
     await decide(interaction, app, "rejected", reason);
-    return await whisper(interaction, `Rejected #${id}.`);
+    await whisper(interaction, `Rejected #${id}.`);
 };
