@@ -88,3 +88,12 @@ test("getTurfPlayers passes the day as query", async() => {
     await api.getTurfPlayers(561461, 207);
     assert.equal(calls[0], "https://gapi.svc.krunker.io/territorial-wars/clan/561461/players?day=207");
 });
+
+test("concurrent get calls are spaced apart", async() => {
+    const sleeps = [];
+    const { fetchFn } = fakeFetch([{ status: 200, body: { data: 1 } }, { status: 200, body: { data: 2 } }]);
+    const client = new KrunkerApi({ fetchFn, sleep: async ms => { sleeps.push(ms); }, spacingMs: 200 });
+    await Promise.all([client.get("/a"), client.get("/b")]);
+    assert.equal(sleeps.length, 1);
+    assert.ok(sleeps[0] > 0 && sleeps[0] <= 200);
+});

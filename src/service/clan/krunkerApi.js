@@ -64,15 +64,21 @@ export class KrunkerApi {
         this.lastCall = 0;
     }
 
+    #queue = Promise.resolve();
+
     /**
-     * Wait so that consecutive calls are at least spacingMs apart
+     * Wait so that calls, even concurrent ones, are at least spacingMs apart
      *
      * @return {Promise<void>}
      */
-    async #space(){
-        const wait = this.lastCall + this.spacingMs - Date.now();
-        if (wait > 0) await this.sleep(wait);
-        this.lastCall = Date.now();
+    #space(){
+        const turn = this.#queue.then(async() => {
+            const wait = this.lastCall + this.spacingMs - Date.now();
+            if (wait > 0) await this.sleep(wait);
+            this.lastCall = Date.now();
+        });
+        this.#queue = turn.catch(() => {});
+        return turn;
     }
 
     /**
