@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { EmbedBuilder, AttachmentBuilder } from "discord.js";
 import Log from "../../util/log.js";
 import defaults from "../../util/defaults.js";
 import { config } from "../../../config/config.js";
@@ -90,15 +90,51 @@ export const applyDiff = async function(guild, diff){
 };
 
 /**
- * Summary embed for the log channel
+ * Cap a field value to a maximum length, cutting on a line boundary where possible
  *
- * @param {{ diff: ReturnType<typeof computeDiff>, result: Awaited<ReturnType<typeof applyDiff>> | null, dryRun: boolean, roster: import("./roster.js").Roster }} input
- * @return {EmbedBuilder}
+ * @param {string} text
+ * @param {number} [max]
+ * @return {string}
  */
-export const buildSyncEmbed = function({ diff, result, dryRun, roster }){
-    const fmt = (/** @type {Array<{ discordId: string, roleIds: string[] }>} */ list) => (list.length
-        ? list.slice(0, 25).map(x => `<@${x.discordId}> ${x.roleIds.map(r => `<@&${r}>`).join(" ")}`).join("\n") + (list.length > 25 ? `\n... and ${list.length - 25} more` : "")
-        : "none");
+export const capField = function(text, max = 1000){
+    if (text.length <= max) return text;
+    const cut = text.slice(0, max - 4);
+    const idx = cut.lastIndexOf("\n");
+    return (idx > 0 ? cut.slice(0, idx) : cut) + "\n...";
+};
+
+/**
+ * Hold back removals when some roster names did not resolve (unless forced)
+ *
+ * @param {ReturnType<typeof computeDiff>} diff
+ * @param {{ unresolved: string[] }} roster
+ * @param {boolean} force
+ * @return {{ diff: ReturnType<typeof computeDiff>, skippedRemovals: ReturnType<typeof computeDiff>["remove"] }}
+ */
+export const guardRemovals = function(diff, roster, force){
+    if (roster.unresolved.length > 0 && !force){
+        return { diff: { ...diff, remove: [] }, skippedRemovals: diff.remove };
+    }
+    return { diff, skippedRemovals: [] };
+};
+
+/**
+ * Summary embed for the log channel, plus a full-text attachment when any field was cut
+ *
+ * @param {{ diff: ReturnType<typeof computeDiff>, result: Awaited<ReturnType<typeof applyDiff>> | null, dryRun: boolean, roster: import("./roster.js").Roster, skippedRemovals?: ReturnType<typeof computeDiff>["remove"] }} input
+ * @return {{ embed: EmbedBuilder, files: AttachmentBuilder[] }}
+ */
+export const buildSyncEmbed = function({ diff, result, dryRun, roster, skippedRemovals = [] }){
+    let cutAny = false;
+    const cap = (/** @type {string} */ text) => {
+        const capped = capField(text);
+        if (capped !== text) cutAny = true;
+        return capped;
+    };
+    const lines = (/** @type {Array<{ discordId: string, roleIds: string[] }>} */ list) => list.map(x => `<@${x.discordId}> ${x.roleIds.map(r => `<@&${r}>`).join(" ")}`).join("\n");
+    const fmt = (/** @type {Array<{ discordId: string, roleIds: string[] }>} */ list) => cap(list.length ? lines(list) : "none");
+    const plain = (/** @type {Array<{ discordId: string, roleIds: string[] }>} */ list) => list.map(x => `${x.discordId} ${x.roleIds.join(" ")}`).join("\n");
+
     const embed = new EmbedBuilder()
         .setTitle(`🛡️┃Clan Sync${dryRun ? " (dry run)" : ""}`)
         .setColor(defaults.embed_color)
@@ -108,16 +144,33 @@ export const buildSyncEmbed = function({ diff, result, dryRun, roster }){
             { name: `Add (${diff.add.length})`, value: fmt(diff.add) },
             { name: `Remove (${diff.remove.length})`, value: fmt(diff.remove) },
         );
+    if (skippedRemovals.length){
+        embed.addFields({ name: "Removals skipped", value: cap(`${skippedRemovals.length} removals skipped because ${roster.unresolved.length} roster names did not resolve. Run /clan-sync force:true to apply them anyway.`) });
+    }
     if (diff.unlinkedWithRoles.length){
-        embed.addFields({ name: `Had clan roles without a link (${diff.unlinkedWithRoles.length})`, value: diff.unlinkedWithRoles.slice(0, 40).map(id => `<@${id}>`).join(" ") });
+        embed.addFields({ name: `Had clan roles without a link (${diff.unlinkedWithRoles.length})`, value: cap(diff.unlinkedWithRoles.map(id => `<@${id}>`).join(" ")) });
     }
     if (roster.unresolved.length){
-        embed.addFields({ name: "Unresolved roster names", value: roster.unresolved.map(n => `\`${n}\``).join(", ").slice(0, 1000) });
+        embed.addFields({ name: "Unresolved roster names", value: cap(roster.unresolved.map(n => `\`${n}\``).join(", ")) });
     }
     if (result){
-        embed.addFields({ name: "Result", value: `added ${result.added}, removed ${result.removed}, failed ${result.failed.length}` + (result.failed.length ? "\n" + result.failed.slice(0, 10).map(f => `<@${f.discordId}>: ${f.error}`).join("\n") : "") });
+        embed.addFields({ name: "Result", value: cap(`added ${result.added}, removed ${result.removed}, failed ${result.failed.length}` + (result.failed.length ? "\n" + result.failed.map(f => `<@${f.discordId}>: ${f.error}`).join("\n") : "")) });
     }
-    return embed;
+
+    /** @type {AttachmentBuilder[]} */
+    const files = [];
+    if (cutAny){
+        const sections = [
+            `ADD (${diff.add.length})\n${plain(diff.add)}`,
+            `REMOVE (${diff.remove.length})\n${plain(diff.remove)}`,
+            `REMOVALS SKIPPED (${skippedRemovals.length})\n${plain(skippedRemovals)}`,
+            `UNLINKED WITH ROLES (${diff.unlinkedWithRoles.length})\n${diff.unlinkedWithRoles.join("\n")}`,
+            `UNRESOLVED ROSTER NAMES (${roster.unresolved.length})\n${roster.unresolved.join("\n")}`,
+            `FAILED (${result ? result.failed.length : 0})\n${result ? result.failed.map(f => `${f.discordId}: ${f.error}`).join("\n") : ""}`,
+        ];
+        files.push(new AttachmentBuilder(Buffer.from(sections.join("\n\n"), "utf8"), { name: "clan-sync.txt" }));
+    }
+    return { embed, files };
 };
 
 /**
@@ -137,32 +190,42 @@ const exemptApplicants = function(db, guildId){
  *
  * @param {import("../client.js").default} client
  * @param {string} guildId
- * @param {{ dryRun?: boolean, db?: import("better-sqlite3").Database, krunker?: import("./krunkerApi.js").KrunkerApi }} [options]
- * @return {Promise<{ diff: ReturnType<typeof computeDiff>, result: Awaited<ReturnType<typeof applyDiff>> | null, embed: EmbedBuilder }>}
+ * @param {{ dryRun?: boolean, force?: boolean, db?: import("better-sqlite3").Database, krunker?: import("./krunkerApi.js").KrunkerApi }} [options]
+ * @return {Promise<{ diff: ReturnType<typeof computeDiff>, result: Awaited<ReturnType<typeof applyDiff>> | null, embed: EmbedBuilder | null, files: AttachmentBuilder[] }>}
  */
-export const runClanSync = async function(client, guildId, { dryRun = false, db = getClanDb(), krunker = api } = {}){
+export const runClanSync = async function(client, guildId, { dryRun = false, force = false, db = getClanDb(), krunker = api } = {}){
     const guild = await client.guilds.fetch(guildId);
     const roster = await fetchRoster(db, krunker, { clanName: config.clan.name });
     const guildMembers = await guild.members.fetch();
     const members = guildMembers.filter(m => !m.user.bot).map(m => ({ discordId: m.id, roleIds: [...m.roles.cache.keys()] }));
 
-    const diff = computeDiff({
+    const full = computeDiff({
         members,
         links: listLinks(db, guildId),
         roster: rosterByPlayerId(roster),
         exempt: exemptApplicants(db, guildId),
         roleIds: config.ids.clan,
     });
+    const { diff, skippedRemovals } = guardRemovals(full, roster, force);
 
     const result = dryRun ? null : await applyDiff(guild, diff);
-    const embed = buildSyncEmbed({ diff, result, dryRun, roster });
 
     Log.done(`[CLAN] Sync ${dryRun ? "dry run" : "applied"}: +${diff.add.length} -${diff.remove.length}`);
 
-    const logChannel = config.ids.log_channel ? await guild.channels.fetch(config.ids.log_channel).catch(() => null) : null;
-    if (logChannel?.isSendable()) await logChannel.send({ embeds: [embed] }).catch(() => null);
+    /** @type {EmbedBuilder | null} */
+    let embed = null;
+    /** @type {AttachmentBuilder[]} */
+    let files = [];
+    try {
+        ({ embed, files } = buildSyncEmbed({ diff, result, dryRun, roster, skippedRemovals }));
+        const logChannel = config.ids.log_channel ? await guild.channels.fetch(config.ids.log_channel).catch(() => null) : null;
+        if (logChannel?.isSendable()) await logChannel.send({ embeds: [embed], files }).catch(() => null);
+    }
+    catch (e){
+        Log.error("[CLAN] Could not build or post the sync summary: ", e);
+    }
 
-    return { diff, result, embed };
+    return { diff, result, embed, files };
 };
 
 /**

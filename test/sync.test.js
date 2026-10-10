@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rolesForRank, computeDiff } from "../src/service/clan/sync.js";
+import { rolesForRank, computeDiff, capField, guardRemovals, buildSyncEmbed } from "../src/service/clan/sync.js";
 import { RANK } from "../src/service/clan/roster.js";
 
 // ========================= //
@@ -64,4 +64,44 @@ test("computeDiff ignores links whose member is gone", () => {
 
 test("computeDiff refuses an empty roster", () => {
     assert.throws(() => computeDiff({ members: [], links: new Map(), roster: new Map(), exempt: new Set(), roleIds: IDS }), /empty/);
+});
+
+test("capField leaves short text and cuts long text on a line boundary", () => {
+    assert.equal(capField("short"), "short");
+    const long = Array.from({ length: 300 }, (_, i) => `line-${i}-xxxxxxxx`).join("\n");
+    assert.equal(long.length > 3000, true);
+    const capped = capField(long);
+    assert.equal(capped.length <= 1000, true);
+    assert.equal(capped.endsWith("\n..."), true);
+    assert.equal(long.startsWith(capped.slice(0, -4)), true);
+    assert.equal(long[capped.length - 4], "\n");
+    assert.equal(capField("x".repeat(3000)).length <= 1000, true);
+});
+
+test("buildSyncEmbed keeps fields within limits and attaches full text only when cut", () => {
+    const entry = (/** @type {number} */ i) => ({ discordId: String(100000000000000000 + i), roleIds: ["111111111111111111", "222222222222222222", "333333333333333333"] });
+    const big = { add: Array.from({ length: 200 }, (_, i) => entry(i)), remove: Array.from({ length: 200 }, (_, i) => entry(i + 500)), unlinkedWithRoles: [] };
+    const roster = { members: [], unresolved: [] };
+    const out = buildSyncEmbed({ diff: big, result: null, dryRun: true, roster: /** @type {any} */ (roster) });
+    for (const f of out.embed.data.fields ?? []) assert.equal(f.value.length <= 1024, true);
+    assert.equal(out.files.length, 1);
+
+    const small = buildSyncEmbed({ diff: { add: big.add.slice(0, 2), remove: [], unlinkedWithRoles: [] }, result: null, dryRun: true, roster: /** @type {any} */ (roster) });
+    assert.equal(small.files.length, 0);
+});
+
+test("guardRemovals holds back removals when names are unresolved unless forced", () => {
+    const diff = { add: [{ discordId: "a", roleIds: ["R"] }], remove: [{ discordId: "b", roleIds: ["S"] }], unlinkedWithRoles: [] };
+    const held = guardRemovals(diff, { unresolved: ["x"] }, false);
+    assert.deepEqual(held.diff.remove, []);
+    assert.deepEqual(held.diff.add, diff.add);
+    assert.deepEqual(held.skippedRemovals, diff.remove);
+
+    const forced = guardRemovals(diff, { unresolved: ["x"] }, true);
+    assert.deepEqual(forced.diff, diff);
+    assert.deepEqual(forced.skippedRemovals, []);
+
+    const clean = guardRemovals(diff, { unresolved: [] }, false);
+    assert.deepEqual(clean.diff, diff);
+    assert.deepEqual(clean.skippedRemovals, []);
 });

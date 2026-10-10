@@ -13,7 +13,8 @@ export default {
         .setDescription("(ADMIN) Sync Discord clan roles with the in-game roster")
         .setContexts([InteractionContextType.Guild])
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addBooleanOption(o => o.setName("dry_run").setDescription("Only show what would change").setRequired(false)),
+        .addBooleanOption(o => o.setName("dry_run").setDescription("Only show what would change").setRequired(false))
+        .addBooleanOption(o => o.setName("force").setDescription("Apply removals even if some roster names did not resolve").setRequired(false)),
 
     /**
      * @param {import("discord.js").ChatInputCommandInteraction} interaction
@@ -21,10 +22,11 @@ export default {
     async execute(interaction){
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
         const dryRun = interaction.options.getBoolean("dry_run") ?? false;
+        const force = interaction.options.getBoolean("force") ?? false;
         try {
             const { client } = interaction;
-            const { embed } = await runClanSync(/** @type {import("../../service/client.js").default} */ (client), interaction.guildId ?? "", { dryRun });
-            await interaction.editReply({ embeds: [embed] });
+            const { embed, files } = await runClanSync(/** @type {import("../../service/client.js").default} */ (client), interaction.guildId ?? "", { dryRun, force });
+            await (embed ? interaction.editReply({ embeds: [embed], files }) : interaction.editReply("Sync finished, but the summary could not be built. Check the bot log."));
         }
         catch (e){
             await interaction.editReply(`Sync aborted: ${e instanceof Error ? e.message : String(e)}`);
