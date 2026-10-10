@@ -1,6 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import defaults from "../../util/defaults.js";
 import { levelFromScore } from "./krunkerApi.js";
+import { capField } from "./sync.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -100,7 +101,7 @@ export const buildReviewEmbed = function(summary, rows, targetSize){
         .setTimestamp()
         .setDescription(`${summary.total} members, target ${targetSize}, ${Math.max(0, summary.total - targetSize)} over.\nKick ${summary.kick} · Watch ${summary.watch} · Keep ${summary.keep}`)
         .addFields(
-            { name: `Kick (${kicks.length})`, value: list(kicks).slice(0, 1024) },
-            { name: `Inactive but protected (${protectedInactive.length})`, value: list(protectedInactive).slice(0, 1024) },
+            { name: `Kick (${kicks.length})`, value: capField(list(kicks)) },
+            { name: `Inactive but protected (${protectedInactive.length})`, value: capField(list(protectedInactive)) },
         );
 };

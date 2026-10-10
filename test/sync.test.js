@@ -113,3 +113,11 @@ test("hasClanRoleIds needs all three ids non-empty", () => {
     assert.equal(hasClanRoleIds({ recruit: "1", soldier: "2" }), false);
     assert.equal(hasClanRoleIds(undefined), false);
 });
+
+test("buildSyncEmbed attaches the full text when removals were held back", () => {
+    const roster = { members: [{}], unresolved: ["a"] };
+    const diff = { add: [], remove: [], unlinkedWithRoles: [] };
+    const skipped = [1, 2, 3].map(n => ({ discordId: `u${n}`, roleIds: ["R"] }));
+    assert.equal(buildSyncEmbed({ diff, result: null, dryRun: true, roster, skippedRemovals: skipped }).files.length, 1);
+    assert.equal(buildSyncEmbed({ diff, result: null, dryRun: true, roster }).files.length, 0);
+});

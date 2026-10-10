@@ -129,7 +129,7 @@ export const guardRemovals = function(diff, roster, force){
 };
 
 /**
- * Summary embed for the log channel, plus a full-text attachment when any field was cut
+ * Summary embed for the log channel, plus a full-text attachment when any field was cut or removals were held back
  *
  * @param {{ diff: ReturnType<typeof computeDiff>, result: Awaited<ReturnType<typeof applyDiff>> | null, dryRun: boolean, roster: import("./roster.js").Roster, skippedRemovals?: ReturnType<typeof computeDiff>["remove"] }} input
  * @return {{ embed: EmbedBuilder, files: AttachmentBuilder[] }}
@@ -158,10 +158,10 @@ export const buildSyncEmbed = function({ diff, result, dryRun, roster, skippedRe
         embed.addFields({ name: "Removals skipped", value: cap(`${skippedRemovals.length} removals skipped because ${roster.unresolved.length} roster names did not resolve. Run /clan-sync force:true to apply them anyway.`) });
     }
     if (diff.unlinkedWithRoles.length){
-        embed.addFields({ name: `Had clan roles without a link (${diff.unlinkedWithRoles.length})`, value: cap(diff.unlinkedWithRoles.map(id => `<@${id}>`).join(" ")) });
+        embed.addFields({ name: `Had clan roles without a link (${diff.unlinkedWithRoles.length})`, value: cap(diff.unlinkedWithRoles.map(id => `<@${id}>`).join("\n")) });
     }
     if (roster.unresolved.length){
-        embed.addFields({ name: "Unresolved roster names", value: cap(roster.unresolved.map(n => `\`${n}\``).join(", ")) });
+        embed.addFields({ name: "Unresolved roster names", value: cap(roster.unresolved.map(n => `\`${n}\``).join("\n")) });
     }
     if (result){
         embed.addFields({ name: "Result", value: cap(`added ${result.added}, removed ${result.removed}, failed ${result.failed.length}` + (result.failed.length ? "\n" + result.failed.map(f => `<@${f.discordId}>: ${f.error}`).join("\n") : "")) });
@@ -169,7 +169,7 @@ export const buildSyncEmbed = function({ diff, result, dryRun, roster, skippedRe
 
     /** @type {AttachmentBuilder[]} */
     const files = [];
-    if (cutAny){
+    if (cutAny || skippedRemovals.length > 0){
         const sections = [
             `ADD (${diff.add.length})\n${plain(diff.add)}`,
             `REMOVE (${diff.remove.length})\n${plain(diff.remove)}`,
