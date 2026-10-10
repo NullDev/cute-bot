@@ -33,8 +33,9 @@ const step = async function(name, fn){
 };
 
 /**
- * Daily clan maintenance: snapshot, turf, sync
- * The snapshot is skipped when today's already exists; turf and sync always run
+ * Daily clan maintenance: snapshot, turf, pending joins, sync
+ * The snapshot is skipped when today's already exists; turf and pending joins always run
+ * The role sync only runs when clan.sync_enabled is true
  *
  * @param {import("../service/client.js").default} client
  * @param {{ force?: boolean }} [options] force re-snapshots even when today's exists
@@ -56,9 +57,11 @@ const clanDaily = async function(client, { force = false } = {}){
     const from = turfEmpty ? day - TURF_BACKFILL_DAYS + 1 : day - 1;
     await step("turf", () => backfillTurf(db, api, config.clan.id, from, day));
 
+    if (!config.clan.sync_enabled) Log.info("[CLAN] Automatic role sync is disabled (clan.sync_enabled)");
+
     for (const guild of client.guilds.cache.values()){
         await step(`pending joins ${guild.id}`, () => checkPendingJoins(client, db, roster, guild.id));
-        await step(`sync ${guild.id}`, () => runClanSync(client, guild.id));
+        if (config.clan.sync_enabled) await step(`sync ${guild.id}`, () => runClanSync(client, guild.id));
     }
 };
 

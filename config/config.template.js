@@ -20,6 +20,7 @@ export default {
     clan: {
         id: 561461,
         name: "cute",
+        sync_enabled: false,
         target_size: 100,
         cooldown_days: 7,
         join_reminder_days: 3,

@@ -26,6 +26,16 @@ export const rolesForRank = function(rank, roleIds){
 };
 
 /**
+ * Whether all three clan rank role ids are configured
+ *
+ * @param {{ recruit?: string, soldier?: string, captain?: string } | null | undefined} roleIds
+ * @return {boolean}
+ */
+export const hasClanRoleIds = function(roleIds){
+    return [roleIds?.recruit, roleIds?.soldier, roleIds?.captain].every(id => typeof id === "string" && id.length > 0);
+};
+
+/**
  * Pure role diff between Discord and the roster
  *
  * @param {{ members: Array<{ discordId: string, roleIds: string[] }>, links: Map<string, { playerId: number }>, roster: Map<number, { rank: number }>, exempt: Set<string>, roleIds: { recruit: string, soldier: string, captain: string } }} input
@@ -194,6 +204,7 @@ const exemptApplicants = function(db, guildId){
  * @return {Promise<{ diff: ReturnType<typeof computeDiff>, result: Awaited<ReturnType<typeof applyDiff>> | null, embed: EmbedBuilder | null, files: AttachmentBuilder[] }>}
  */
 export const runClanSync = async function(client, guildId, { dryRun = false, force = false, db = getClanDb(), krunker = api } = {}){
+    if (!hasClanRoleIds(config.ids.clan)) throw new Error("Clan role ids are not configured (ids.clan.recruit/soldier/captain)");
     const guild = await client.guilds.fetch(guildId);
     const roster = await fetchRoster(db, krunker, { clanName: config.clan.name });
     const guildMembers = await guild.members.fetch();
@@ -236,6 +247,10 @@ export const runClanSync = async function(client, guildId, { dryRun = false, for
  * @return {Promise<number | null>} the rank applied, or null when not on the roster
  */
 export const syncOneMember = async function(member, { db = getClanDb(), krunker = api } = {}){
+    if (!hasClanRoleIds(config.ids.clan)){
+        Log.warn("[CLAN] Clan role ids are not configured (ids.clan.recruit/soldier/captain), skipping role sync");
+        return null;
+    }
     const link = getLinkByDiscord(db, member.guild.id, member.id);
     if (!link) return null;
     const roster = await fetchRoster(db, krunker, { clanName: config.clan.name }).catch(() => null);

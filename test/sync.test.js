@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rolesForRank, computeDiff, capField, guardRemovals, buildSyncEmbed } from "../src/service/clan/sync.js";
+import { rolesForRank, computeDiff, capField, guardRemovals, buildSyncEmbed, hasClanRoleIds } from "../src/service/clan/sync.js";
 import { RANK } from "../src/service/clan/roster.js";
 
 // ========================= //
@@ -104,4 +104,12 @@ test("guardRemovals holds back removals when names are unresolved unless forced"
     const clean = guardRemovals(diff, { unresolved: [] }, false);
     assert.deepEqual(clean.diff, diff);
     assert.deepEqual(clean.skippedRemovals, []);
+});
+
+test("hasClanRoleIds needs all three ids non-empty", () => {
+    assert.equal(hasClanRoleIds({ recruit: "1", soldier: "2", captain: "3" }), true);
+    assert.equal(hasClanRoleIds({ recruit: "", soldier: "2", captain: "3" }), false);
+    assert.equal(hasClanRoleIds({ recruit: "1", soldier: "2", captain: "" }), false);
+    assert.equal(hasClanRoleIds({ recruit: "1", soldier: "2" }), false);
+    assert.equal(hasClanRoleIds(undefined), false);
 });

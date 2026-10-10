@@ -1,4 +1,5 @@
 import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, MessageFlags } from "discord.js";
+import { config } from "../../../config/config.js";
 import { runClanSync } from "../../service/clan/sync.js";
 
 // ========================= //
@@ -26,7 +27,8 @@ export default {
         try {
             const { client } = interaction;
             const { embed, files } = await runClanSync(/** @type {import("../../service/client.js").default} */ (client), interaction.guildId ?? "", { dryRun, force });
-            await (embed ? interaction.editReply({ embeds: [embed], files }) : interaction.editReply("Sync finished, but the summary could not be built. Check the bot log."));
+            const note = config.clan.sync_enabled ? "" : "Automatic daily sync is disabled (clan.sync_enabled). ";
+            await (embed ? interaction.editReply({ content: note || undefined, embeds: [embed], files }) : interaction.editReply(`${note}Sync finished, but the summary could not be built. Check the bot log.`));
         }
         catch (e){
             await interaction.editReply(`Sync aborted: ${e instanceof Error ? e.message : String(e)}`);
