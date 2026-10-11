@@ -1,5 +1,5 @@
 import {
-    ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle,
+    ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ThreadAutoArchiveDuration,
 } from "discord.js";
 import Log from "../../util/log.js";
 import defaults from "../../util/defaults.js";
@@ -210,6 +210,9 @@ export const handleApplicationSubmit = async function(interaction){
         // informal vote only, nothing reads these
         for (const emoji of VOTE_REACTIONS) await message.react(emoji).catch(() => null);
         setApplicationMessage(db, id, channel.id, message.id);
+        // a thread per application for the reviewers to talk in; failures (missing permission) do not block the application
+        await message.startThread({ name: `#${id} ${app.playerName}`.slice(0, 100), autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek })
+            .catch(e => Log.warn(`[CLAN] Could not start a thread for application #${id}: ${e instanceof Error ? e.message : String(e)}`));
     }
     catch (error){
         db.prepare("delete from applications where id = ?").run(id);
