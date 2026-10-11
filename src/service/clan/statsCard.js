@@ -1,4 +1,3 @@
-import { config } from "../../../config/config.js";
 import { levelFromScore, TURF_EPOCH_UTC } from "./krunkerApi.js";
 
 // ========================= //
@@ -32,16 +31,17 @@ const pct = (part, whole) => `${Math.round(100 * (Number(part) || 0) / Math.max(
  * Stats lines for a player card (applications, evaluations)
  *
  * @param {any} profile
+ * @param {string} clanName the clan this card is for, to flag players in another clan
  * @return {string}
  */
-export const statsText = function(profile){
+export const statsText = function(profile, clanName){
     if (!profile) return "stats unavailable";
     const st = profile.player_stats ?? {};
     const kills = Number(profile.player_kills) || 0;
     const deaths = Number(profile.player_deaths) || 0;
     const games = Number(profile.player_games_played) || 0;
     const wins = Number(profile.player_wins) || 0;
-    const inOtherClan = profile.player_clan && profile.player_clan !== config.clan.name;
+    const inOtherClan = profile.player_clan && profile.player_clan !== clanName;
     return [
         `Level **${levelFromScore(profile.player_score)}** · KDR **${(kills / Math.max(deaths, 1)).toFixed(2)}** · KPG **${(kills / Math.max(games, 1)).toFixed(1)}** · W/L **${(wins / Math.max(games - wins, 1)).toFixed(2)}**`,
         `Kills **${num(kills)}** · Deaths **${num(deaths)}** · Wins **${num(wins)}** · Games **${num(games)}** · Hours **${num((Number(profile.player_timeplayed) || 0) / 3600000)}**`,

@@ -1,10 +1,11 @@
 import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, MessageFlags, AttachmentBuilder } from "discord.js";
-import { config } from "../../../config/config.js";
 import { api, turfDay } from "../../service/clan/krunkerApi.js";
 import { getClanDb } from "../../service/clan/db.js";
 import { listLinks } from "../../service/clan/identity.js";
 import { fetchRoster } from "../../service/clan/roster.js";
-import { reviewClan, DEFAULT_REVIEW } from "../../service/clan/review.js";
+import { reviewClan } from "../../service/clan/review.js";
+import { reviewConfig } from "../../service/clan/evaluatePlayer.js";
+import { clanForGuild, clanTargetSize } from "../../service/clan/clans.js";
 import { buildReviewRows, formatReviewTable, buildReviewEmbed } from "../../service/clan/reviewReport.js";
 
 // ========================= //
@@ -43,17 +44,19 @@ export default {
         const filter = interaction.options.getString("filter") ?? "all";
         const db = getClanDb();
         const guildId = interaction.guildId ?? "";
+        const clan = clanForGuild(guildId);
+        if (!clan) return await interaction.editReply("This command is not available here.");
 
         let roster;
         try {
-            roster = await fetchRoster(db, api, { clanName: config.clan.name });
+            roster = await fetchRoster(db, api, { clanName: clan.name });
         }
         catch (e){
             return await interaction.editReply(`Could not fetch the roster: ${e instanceof Error ? e.message : String(e)}`);
         }
 
         const rows = buildReviewRows(db, roster, listLinks(db, guildId), turfDay());
-        const cfg = { ...DEFAULT_REVIEW, ...(config.clan.review ?? {}) };
+        const cfg = reviewConfig(guildId);
         const result = reviewClan(rows, cfg);
 
         let shown = result.rows;
@@ -62,7 +65,7 @@ export default {
 
         const file = new AttachmentBuilder(Buffer.from(formatReviewTable(shown), "utf-8"), { name: `clan-review-${turfDay()}.txt` });
         return await interaction.editReply({
-            embeds: [buildReviewEmbed(result.summary, result.rows, config.clan.target_size)],
+            embeds: [buildReviewEmbed(result.summary, result.rows, clanTargetSize(clan))],
             files: [file],
         });
     },

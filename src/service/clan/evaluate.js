@@ -1,6 +1,5 @@
 import { EmbedBuilder } from "discord.js";
 import defaults from "../../util/defaults.js";
-import { config } from "../../../config/config.js";
 import { profileUrl, statsText, turfText, num } from "./statsCard.js";
 import { explainMember } from "./review.js";
 import { applicantVerdict } from "./evaluatePlayer.js";
@@ -33,10 +32,10 @@ const breakdown = function(row, result){
 /**
  * Evaluation embed for one player
  *
- * @param {{ row: import("./review.js").ReviewRow, result: ReturnType<typeof import("./review.js").scoreMember>, refs: ReturnType<typeof import("./review.js").computeRefs>, cfg: typeof import("./review.js").DEFAULT_REVIEW, profile: any, turf: any, turf14?: { kills: number, games: number, clans: Record<string, number> } | null, member: boolean }} input
+ * @param {{ clan: import("./clans.js").ClanEntry, row: import("./review.js").ReviewRow, result: ReturnType<typeof import("./review.js").scoreMember>, refs: ReturnType<typeof import("./review.js").computeRefs>, cfg: typeof import("./review.js").DEFAULT_REVIEW, profile: any, turf: any, turf14?: { kills: number, games: number, clans: Record<string, number> } | null, member: boolean }} input
  * @return {EmbedBuilder}
  */
-export const buildEvaluationEmbed = function({ row, result, refs, cfg, profile, turf, turf14 = null, member }){
+export const buildEvaluationEmbed = function({ clan, row, result, refs, cfg, profile, turf, turf14 = null, member }){
     const reasoning = explainMember(row, result, refs, cfg);
     let headline;
     if (member){
@@ -61,14 +60,14 @@ export const buildEvaluationEmbed = function({ row, result, refs, cfg, profile, 
     ].join("\n");
 
     const embed = new EmbedBuilder()
-        .setTitle(`🔎┃Evaluation: ${row.playerName}`)
+        .setTitle(`🔎┃Evaluation: ${row.playerName} for [${clan.name}]`)
         .setURL(profileUrl(row.playerName))
         .setColor((member ? VERDICT_COLOR : APPLICANT_COLOR)[result.verdict] ?? defaults.embed_color)
         .setDescription(`${headline}\n[profile](${profileUrl(row.playerName)}) · id ${row.playerId}${member && !row.linked ? " · not linked on Discord" : ""}`)
         .addFields(
-            { name: "Stats", value: statsText(profile) },
+            { name: "Stats", value: statsText(profile, clan.name) },
             { name: "Turf (this season)", value: turfText(turf) },
-            { name: member ? `Last 14 days in [${config.clan.name}]` : "Last 14 days", value: recent },
+            { name: member ? `Last 14 days in [${clan.name}]` : "Last 14 days", value: recent },
             { name: "Score breakdown", value: breakdown(row, result) },
             { name: "Reasoning", value: reasoning.map(l => `• ${l}`).join("\n").slice(0, 1024) },
         )

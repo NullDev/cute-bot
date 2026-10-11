@@ -3,6 +3,7 @@ import { api } from "../../service/clan/krunkerApi.js";
 import { getClanDb } from "../../service/clan/db.js";
 import { getLinkByDiscord } from "../../service/clan/identity.js";
 import { evaluatePlayer } from "../../service/clan/evaluatePlayer.js";
+import { clanForGuild } from "../../service/clan/clans.js";
 import { buildEvaluationEmbed } from "../../service/clan/evaluate.js";
 
 // ========================= //
@@ -28,6 +29,8 @@ export default {
         const isPublic = interaction.options.getBoolean("public") ?? false;
         await interaction.deferReply(isPublic ? {} : { flags: [MessageFlags.Ephemeral] });
         const guildId = interaction.guildId ?? "";
+        const clan = clanForGuild(guildId);
+        if (!clan) return await interaction.editReply("This command is not available here.");
         const db = getClanDb();
 
         let ign = interaction.options.getString("ign")?.trim() ?? "";
@@ -50,7 +53,7 @@ export default {
 
         let evaluation;
         try {
-            evaluation = await evaluatePlayer({ db, api, guildId, profile });
+            evaluation = await evaluatePlayer({ db, api, guildId, clan, profile });
         }
         catch (e){
             return await interaction.editReply(`Could not evaluate: ${e instanceof Error ? e.message : String(e)}`);

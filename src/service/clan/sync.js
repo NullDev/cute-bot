@@ -6,6 +6,7 @@ import { api } from "./krunkerApi.js";
 import { getClanDb } from "./db.js";
 import { listLinks, getLinkByDiscord } from "./identity.js";
 import { fetchRoster, rosterByPlayerId, RANK } from "./roster.js";
+import { isMainGuild, mainClan } from "./clans.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -206,7 +207,10 @@ const exemptApplicants = function(db, guildId){
 export const runClanSync = async function(client, guildId, { dryRun = false, force = false, db = getClanDb(), krunker = api } = {}){
     if (!hasClanRoleIds(config.ids.clan)) throw new Error("Clan role ids are not configured (ids.clan.recruit/soldier/captain)");
     const guild = await client.guilds.fetch(guildId);
-    const roster = await fetchRoster(db, krunker, { clanName: config.clan.name });
+    if (!isMainGuild(guildId)) throw new Error("Role sync only runs on the main server");
+    const clan = mainClan();
+    if (!clan) throw new Error("No clan configured for the main server (clan.main_server and clan.clans)");
+    const roster = await fetchRoster(db, krunker, { clanName: clan.name });
     const guildMembers = await guild.members.fetch();
     const members = guildMembers.filter(m => !m.user.bot).map(m => ({ discordId: m.id, roleIds: [...m.roles.cache.keys()] }));
 
@@ -253,7 +257,9 @@ export const syncOneMember = async function(member, { db = getClanDb(), krunker 
     }
     const link = getLinkByDiscord(db, member.guild.id, member.id);
     if (!link) return null;
-    const roster = await fetchRoster(db, krunker, { clanName: config.clan.name }).catch(() => null);
+    const clan = isMainGuild(member.guild.id) ? mainClan() : null;
+    if (!clan) return null;
+    const roster = await fetchRoster(db, krunker, { clanName: clan.name }).catch(() => null);
     const entry = roster ? rosterByPlayerId(roster).get(link.playerId) : null;
     if (!entry) return null;
     await member.roles.add(rolesForRank(entry.rank, config.ids.clan), "clan sync").catch(e => Log.error("[CLAN] syncOneMember failed: ", e));

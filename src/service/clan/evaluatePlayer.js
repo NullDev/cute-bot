@@ -1,6 +1,7 @@
 import { config } from "../../../config/config.js";
 import { levelFromScore, turfDay } from "./krunkerApi.js";
 import { listLinks } from "./identity.js";
+import { isMainGuild } from "./clans.js";
 import { fetchRoster } from "./roster.js";
 import { computeRefs, computeScoreMedians, scoreMember, DEFAULT_REVIEW } from "./review.js";
 import { buildReviewRows } from "./reviewReport.js";
@@ -65,16 +66,28 @@ export const applicantVerdict = function(verdict){
 };
 
 /**
+ * Review settings for a guild: the Discord link penalty only exists where the verify flow runs (the main server)
+ *
+ * @param {string} guildId
+ * @return {typeof DEFAULT_REVIEW}
+ */
+export const reviewConfig = function(guildId){
+    const cfg = { ...DEFAULT_REVIEW, ...(config.clan.review ?? {}) };
+    if (!isMainGuild(guildId)) cfg.penalties = { ...cfg.penalties, unlinked: 0 };
+    return cfg;
+};
+
+/**
  * Evaluate one player against the current clan: members from the daily snapshots, everyone else from live data
  *
- * @param {{ db: import("better-sqlite3").Database, api: import("./krunkerApi.js").KrunkerApi, guildId: string, profile: any }} input
- * @return {Promise<{ row: import("./review.js").ReviewRow, result: ReturnType<typeof scoreMember>, refs: ReturnType<typeof computeRefs> & ReturnType<typeof computeScoreMedians>, cfg: typeof DEFAULT_REVIEW, turf: any, turf14: ReturnType<typeof turf14FromContributions> | null, member: boolean }>}
+ * @param {{ db: import("better-sqlite3").Database, api: import("./krunkerApi.js").KrunkerApi, guildId: string, clan: import("./clans.js").ClanEntry, profile: any }} input
+ * @return {Promise<{ clan: import("./clans.js").ClanEntry, row: import("./review.js").ReviewRow, result: ReturnType<typeof scoreMember>, refs: ReturnType<typeof computeRefs> & ReturnType<typeof computeScoreMedians>, cfg: typeof DEFAULT_REVIEW, turf: any, turf14: ReturnType<typeof turf14FromContributions> | null, member: boolean }>}
  */
-export const evaluatePlayer = async function({ db, api, guildId, profile }){
-    const roster = await fetchRoster(db, api, { clanName: config.clan.name });
+export const evaluatePlayer = async function({ db, api, guildId, clan, profile }){
+    const roster = await fetchRoster(db, api, { clanName: clan.name });
     const day = turfDay();
     const rows = buildReviewRows(db, roster, listLinks(db, guildId), day);
-    const cfg = { ...DEFAULT_REVIEW, ...(config.clan.review ?? {}) };
+    const cfg = reviewConfig(guildId);
     const baseRefs = computeRefs(rows);
     const refs = { ...baseRefs, ...computeScoreMedians(rows, baseRefs, cfg) };
 
@@ -88,5 +101,5 @@ export const evaluatePlayer = async function({ db, api, guildId, profile }){
     }
     const result = scoreMember(row, refs, cfg);
     const turf = await api.getTurfPlayer(profile.player_id).catch(() => null);
-    return { row, result, refs, cfg, turf, turf14, member: !!memberRow };
+    return { clan, row, result, refs, cfg, turf, turf14, member: !!memberRow };
 };

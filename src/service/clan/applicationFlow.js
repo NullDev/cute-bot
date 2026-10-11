@@ -7,6 +7,7 @@ import { config } from "../../../config/config.js";
 import { api } from "./krunkerApi.js";
 import { profileUrl, statsText, turfText } from "./statsCard.js";
 import { evaluatePlayer } from "./evaluatePlayer.js";
+import { mainClan } from "./clans.js";
 import { buildEvaluationEmbed } from "./evaluate.js";
 
 export { profileUrl };
@@ -72,9 +73,10 @@ export const decisionComponents = function(id, disabled, url){
  * @param {any} profile player profile or null
  * @param {{ status: string, reviewerId: string, reason: string | null, decidedAt: number, rolesOk?: boolean, dmOk?: boolean, rolesError?: string | null } | null} decision
  * @param {any} [turf=null] result of getTurfPlayer for the applicant, or null
+ * @param {string} [clanName] clan the application is for, defaults to the main server's clan
  * @return {EmbedBuilder}
  */
-export const buildApplicationEmbed = function(app, profile, decision, turf = null){
+export const buildApplicationEmbed = function(app, profile, decision, turf = null, clanName = mainClan()?.name ?? ""){
     const a = app.answers;
 
     let color = defaults.embed_color;
@@ -86,7 +88,7 @@ export const buildApplicationEmbed = function(app, profile, decision, turf = nul
         .setColor(color)
         .setDescription(`Applicant: <@${app.discordId}>\nIGN: \`${app.playerName}\` (id ${app.playerId}) · [profile](${profileUrl(app.playerName)})`)
         .addFields(
-            { name: "Stats", value: statsText(profile) },
+            { name: "Stats", value: statsText(profile, clanName) },
             { name: "Turf (this season)", value: turfText(turf) },
             { name: "Main mode & region", value: a.modeRegion || "-" },
             { name: "Why join", value: (a.why || "-").slice(0, 1024) },
@@ -169,7 +171,12 @@ export const handleApplicationSubmit = async function(interaction){
         return;
     }
 
-    const roster = await fetchRoster(db, api, { clanName: config.clan.name }).catch(() => null);
+    const clan = mainClan();
+    if (!clan){
+        await whisper(interaction, "No clan is configured, please tell a mod.");
+        return;
+    }
+    const roster = await fetchRoster(db, api, { clanName: clan.name }).catch(() => null);
     if (roster && rosterByPlayerId(roster).has(profile.player_id)){
         await whisper(interaction, `\`${profile.player_name}\` is already in the clan. If that is you, press Verify instead.`);
         return;
@@ -199,7 +206,7 @@ export const handleApplicationSubmit = async function(interaction){
     const app = /** @type {import("./applications.js").Application} */ (getApplication(db, id));
     try {
         const turf = await api.getTurfPlayer(profile.player_id).catch(() => null);
-        const message = await channel.send({ embeds: [buildApplicationEmbed(app, profile, null, turf)], components: [decisionComponents(id, false, profileUrl(app.playerName))] });
+        const message = await channel.send({ embeds: [buildApplicationEmbed(app, profile, null, turf, clan.name)], components: [decisionComponents(id, false, profileUrl(app.playerName))] });
         // informal vote only, nothing reads these
         for (const emoji of VOTE_REACTIONS) await message.react(emoji).catch(() => null);
         setApplicationMessage(db, id, channel.id, message.id);
@@ -253,7 +260,7 @@ const decide = async function(interaction, app, status, reason){
                 const user = await interaction.client.users.fetch(app.discordId);
                 let text;
                 if (status === "accepted"){
-                    const inClan = profile?.player_clan === config.clan.name;
+                    const inClan = profile?.player_clan === mainClan()?.name;
                     const next = inClan
                         ? " Welcome, you are already in the clan in game."
                         : " If you have not done it yet, request to join in game: profile → clan → search `cute`. Your Discord roles update automatically once you are in.";
@@ -347,8 +354,13 @@ export const handleApplicationEvaluate = async function(interaction){
         await whisper(interaction, `No Krunker player named \`${app.playerName}\` any more.`);
         return;
     }
+    const clan = mainClan();
+    if (!clan){
+        await whisper(interaction, "No clan is configured, please tell a mod.");
+        return;
+    }
     try {
-        const evaluation = await evaluatePlayer({ db: getClanDb(), api, guildId: interaction.guildId ?? "", profile });
+        const evaluation = await evaluatePlayer({ db: getClanDb(), api, guildId: interaction.guildId ?? "", clan, profile });
         await interaction.editReply({ embeds: [buildEvaluationEmbed({ ...evaluation, profile })] });
     }
     catch (e){

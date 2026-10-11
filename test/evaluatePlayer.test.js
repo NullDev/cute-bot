@@ -53,7 +53,9 @@ test("evaluation embed shows a would-be verdict and the clans played for when no
     const turf14 = { kills: 600, games: 50, clans: { TWZY: 50 } };
     const row = applicantRow(PROFILE, turf14);
     const result = scoreMember(row, REFS, DEFAULT_REVIEW);
-    const embed = buildEvaluationEmbed({ row, result, refs: REFS, cfg: DEFAULT_REVIEW, profile: PROFILE, turf: null, turf14, member: false }).toJSON();
+    const clan = { discord: "g", id: 561461, name: "cute" };
+    const embed = buildEvaluationEmbed({ clan, row, result, refs: REFS, cfg: DEFAULT_REVIEW, profile: PROFILE, turf: null, turf14, member: false }).toJSON();
+    assert.equal(embed.title, "🔎┃Evaluation: Vorfw for [cute]");
     assert.ok(embed.description.includes("Would-be verdict: **ACCEPT**"), embed.description);
     const recent = embed.fields.find(f => f.name === "Last 14 days")?.value ?? "";
     assert.ok(recent.includes("played for [TWZY] 50 games"), recent);
