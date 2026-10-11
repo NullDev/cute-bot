@@ -314,7 +314,7 @@ const decide = async function(interaction, app, status, reason){
                 }
                 else {
                     const why = reason ? `\nReason: ${reason}` : "";
-                    text = `Your application to **[cute]** was not accepted.${why}\nYou can apply again in ${config.clan.cooldown_days} days.`;
+                    text = `Sadly your application to **[cute]** was not accepted, sorry.${why}`;
                 }
                 await user.send(text);
             },
