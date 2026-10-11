@@ -20,7 +20,7 @@ export const DEFAULT_REVIEW = Object.freeze({
  * @property {number} kdr
  * @property {number} kpg
  * @property {number} nukes
- * @property {number} s7
+ * @property {number | null} s7 clan score of the last 7 days, null when unknown (not a member) and then credited at the median
  * @property {number} turf14Kills
  * @property {number} turf14Games
  * @property {number | null} score14Delta
@@ -53,6 +53,12 @@ const median = function(values){
 const isInactive = row => row.s7 === 0 && row.turf14Games === 0 && (row.score14Delta === null || row.score14Delta === 0);
 
 /**
+ * @param {ReviewRow} row
+ * @return {number}
+ */
+const s7Known = row => (row.s7 === null ? 0 : row.s7);
+
+/**
  * Reference values (medians of active members)
  *
  * @param {ReviewRow[]} rows
@@ -63,7 +69,7 @@ export const computeRefs = function(rows){
     const nz = (/** @type {number[]} */ v) => v.filter(x => x > 0);
     const known = rows.filter(r => r.level > 0);
     return {
-        refS7: median(nz(active.map(r => r.s7))) || 1,
+        refS7: median(nz(active.map(r => s7Known(r)))) || 1,
         refTurf: median(nz(active.map(r => r.turf14Kills))) || 1,
         refDelta: median(nz(active.map(r => r.score14Delta ?? 0))) || 1,
         medLevel: known.length ? median(known.map(r => r.level)) : 0,
@@ -90,7 +96,7 @@ export const scoreMember = function(row, refs, cfg){
         { name: "kdr", value: w.kdr * clamp(row.kdr - 1, -1, 3) * (1 - lvl / 200), text: `KDR ${row.kdr.toFixed(2)} at level ${row.level}` },
         { name: "kpg", value: w.kpg * clamp(row.kpg / 10, 0, 2), text: `${row.kpg.toFixed(1)} kills per game` },
         { name: "rank", value: w.rank * (row.rankedRank > 0 ? row.rankedRank / 10 : 0), text: row.rankedRank > 0 ? `ranked rank ${row.rankedRank}` : "not ranked" },
-        { name: "s7", value: w.s7 * Math.min(row.s7 / refs.refS7, 2), text: `7 day score ${row.s7}` },
+        { name: "s7", value: row.s7 === null ? w.s7 : w.s7 * Math.min(row.s7 / refs.refS7, 2), text: row.s7 === null ? "7 day clan score unknown, credited at the median" : `7 day score ${row.s7}` },
         { name: "turf", value: w.turf * Math.min(row.turf14Kills / refs.refTurf, 2), text: `${row.turf14Kills} turf kills in 14 days` },
         { name: "delta", value: row.score14Delta === null ? 0 : w.delta * Math.min(row.score14Delta / refs.refDelta, 2), text: `14 day score gain ${row.score14Delta ?? "unknown"}` },
     ];
@@ -187,7 +193,8 @@ export const explainMember = function(row, result, refs, cfg){
             lines.push(`Played ${fmt(row.turf14Games)} turf games with ${fmt(row.turf14Kills)} kills in the last 14 days, ${(row.turf14Kills / refs.refTurf).toFixed(1)}x the clan median of ${fmt(refs.refTurf)} kills.`);
         }
         else lines.push("No turf games in the last 14 days.");
-        lines.push(`${fmt(row.s7)} clan score in the last 7 days, ${relation(row.s7, refs.refS7)} the median of ${fmt(refs.refS7)}.`);
+        if (row.s7 === null) lines.push("The 7-day clan score is only tracked for members, so it is credited at the clan median here.");
+        else lines.push(`${fmt(row.s7)} clan score in the last 7 days, ${relation(row.s7, refs.refS7)} the median of ${fmt(refs.refS7)}.`);
         if (row.score14Delta !== null) lines.push(`Gained ${fmt(row.score14Delta)} score in the last 14 days, ${relation(row.score14Delta, refs.refDelta)} the median of ${fmt(refs.refDelta)}.`);
     }
 
@@ -215,7 +222,13 @@ export const explainMember = function(row, result, refs, cfg){
 
     // verdict
     const total = result.total.toFixed(2);
-    lines.push(`Verdict ${result.verdict.toUpperCase()} with a total of ${total} (paper ${result.paper.toFixed(2)}, activity ${result.activity.toFixed(2)}, bonus ${result.bonus.toFixed(2)}); watch below ${cfg.thresholds.watch}, kick below ${cfg.thresholds.kick}.`);
+    const parts = `(paper ${result.paper.toFixed(2)}, activity ${result.activity.toFixed(2)}, bonus ${result.bonus.toFixed(2)})`;
+    if (row.s7 === null){
+        // not a member: the same lines read as accept or deny
+        const label = result.verdict === "keep" ? "ACCEPT" : `DENY${result.verdict === "watch" ? " (borderline)" : ""}`;
+        lines.push(`Would-be verdict ${label} with a total of ${total} ${parts}; accept from ${cfg.thresholds.watch}.`);
+    }
+    else lines.push(`Verdict ${result.verdict.toUpperCase()} with a total of ${total} ${parts}; watch below ${cfg.thresholds.watch}, kick below ${cfg.thresholds.kick}.`);
     if (!result.inactive && refs.medPaper !== undefined && refs.medActivity !== undefined){
         const paperRel = relation(result.paper, refs.medPaper);
         const activityRel = relation(result.activity, refs.medActivity);

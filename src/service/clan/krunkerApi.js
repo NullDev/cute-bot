@@ -242,6 +242,16 @@ export class KrunkerApi {
     async getTurfPlayer(playerId){
         return (await this.get(`/territorial-wars/player/${playerId}`)).data;
     }
+
+    /**
+     * Turf rows of a player for every day and map of the season, whichever clan they played for
+     *
+     * @param {number} playerId
+     * @return {Promise<Array<{ day: number, clan_id: number, clan_name: string, map_id: number, map_name: string, kills: number, deaths: number, games: number, kd: number }>>}
+     */
+    async getTurfContributions(playerId){
+        return (await this.get(`/territorial-wars/player/${playerId}/contributions`)).data ?? [];
+    }
 }
 
 export const api = new KrunkerApi({ proxyUrl: config.clan?.api_proxy || "" });
