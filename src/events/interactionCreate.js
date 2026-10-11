@@ -1,10 +1,14 @@
 import path from "node:path";
+import { MessageFlags } from "discord.js";
 import { QuickDB } from "quick.db";
 import sendVerifyModal from "../service/sendVerifyModal.js";
 import handleVerification from "../service/handleVerification.js";
 import handleGiveawayJoin from "../service/handleGiveawayJoin.js";
 import handleGiveawayParticipants from "../service/handleGiveawayParticipants.js";
 import Log from "../util/log.js";
+import { isMainGuild, SHARED_COMMANDS } from "../service/clan/clans.js";
+
+const NOT_HERE = "This command is not available here.";
 import {
     APPLY_BUTTON, APPLY_MODAL, ACCEPT_PREFIX, REJECT_PREFIX, REJECT_MODAL_PREFIX, EVALUATE_PREFIX,
     sendApplicationModal, handleApplicationSubmit, handleApplicationDecision, handleRejectModal, handleApplicationEvaluate,
@@ -25,6 +29,11 @@ const statDb = new QuickDB({
  * @return {Promise<void>}
  */
 const handleCommandInteraction = async function(interaction){
+    if (!isMainGuild(interaction.guildId) && !SHARED_COMMANDS.includes(interaction.commandName)){
+        await interaction.reply({ content: NOT_HERE, flags: [MessageFlags.Ephemeral] }).catch(() => null);
+        return;
+    }
+
     const command = /** @type {import("../service/client.js").default} */ (interaction.client)
         .commands.get(interaction.commandName);
 
@@ -56,6 +65,10 @@ const handleCommandInteraction = async function(interaction){
  * @param {import("discord.js").ModalSubmitInteraction} interaction
  */
 const handleModalSubmit = async function(interaction){
+    if (!isMainGuild(interaction.guildId)){
+        await interaction.reply({ content: NOT_HERE, flags: [MessageFlags.Ephemeral] }).catch(() => null);
+        return;
+    }
     if (interaction.customId === "submit_into") await handleVerification(interaction);
     if (interaction.customId === APPLY_MODAL) await handleApplicationSubmit(interaction);
     if (interaction.customId.startsWith(REJECT_MODAL_PREFIX)) await handleRejectModal(interaction);
@@ -67,6 +80,10 @@ const handleModalSubmit = async function(interaction){
  * @param {import("discord.js").ButtonInteraction} interaction
  */
 const handleButtonInteraction = async function(interaction){
+    if (!isMainGuild(interaction.guildId)){
+        await interaction.reply({ content: NOT_HERE, flags: [MessageFlags.Ephemeral] }).catch(() => null);
+        return;
+    }
     if (interaction.customId === "verify") await sendVerifyModal(interaction);
     if (interaction.customId === APPLY_BUTTON) await sendApplicationModal(interaction);
     if (interaction.customId.startsWith(ACCEPT_PREFIX) || interaction.customId.startsWith(REJECT_PREFIX)) await handleApplicationDecision(interaction);

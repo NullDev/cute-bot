@@ -5,6 +5,7 @@ import { getClanDb } from "../service/clan/db.js";
 import { fetchRoster } from "../service/clan/roster.js";
 import { runSnapshot, backfillTurf, hasSnapshotForDay } from "../service/clan/snapshot.js";
 import { runClanSync } from "../service/clan/sync.js";
+import { allClans, mainGuildId, isMainGuild } from "../service/clan/clans.js";
 import { checkPendingJoins } from "../service/clan/pendingJoins.js";
 
 // ========================= //
@@ -43,26 +44,33 @@ const step = async function(name, fn){
 const clanDaily = async function(client, { force = false } = {}){
     const db = getClanDb();
     const day = turfDay();
-    const roster = await step("roster", () => fetchRoster(db, api, { clanName: config.clan.name }));
-    if (!roster) return;
-
-    if (force || !hasSnapshotForDay(db, day)){
-        for (const guild of client.guilds.cache.values()){
-            await step(`snapshot ${guild.id}`, () => runSnapshot(db, api, roster, { guildId: guild.id, day }));
-        }
+    const clans = allClans();
+    if (!clans.length){
+        Log.warn("[CLAN] No clans configured (clan.main_server and clan.clans), skipping the daily run");
+        return;
     }
-    else Log.info(`[CLAN] Snapshot for day ${day} exists, skipping`);
 
+    const snapshotToday = force || !hasSnapshotForDay(db, day);
+    if (!snapshotToday) Log.info(`[CLAN] Snapshot for day ${day} exists, skipping`);
     const turfEmpty = !db.prepare("select 1 from turf_days limit 1").get();
     const from = turfEmpty ? day - TURF_BACKFILL_DAYS + 1 : day - 1;
-    await step("turf", () => backfillTurf(db, api, config.clan.id, from, day));
 
-    if (!config.clan.sync_enabled) Log.info("[CLAN] Automatic role sync is disabled (clan.sync_enabled)");
-
-    for (const guild of client.guilds.cache.values()){
-        await step(`pending joins ${guild.id}`, () => checkPendingJoins(client, db, roster, guild.id));
-        if (config.clan.sync_enabled) await step(`sync ${guild.id}`, () => runClanSync(client, guild.id));
+    /** @type {import("../service/clan/roster.js").Roster | null} */
+    let mainRoster = null;
+    for (const clan of clans){
+        const roster = await step(`roster ${clan.name}`, () => fetchRoster(db, api, { clanName: clan.name }));
+        if (!roster) continue;
+        if (isMainGuild(clan.discord)) mainRoster = roster;
+        if (snapshotToday) await step(`snapshot ${clan.name}`, () => runSnapshot(db, api, roster, { guildId: clan.discord, day }));
+        await step(`turf ${clan.name}`, () => backfillTurf(db, api, clan.id, from, day));
     }
+
+    if (!mainRoster) return;
+    const guildId = mainGuildId() || [...client.guilds.cache.keys()][0] || "";
+    if (!guildId) return;
+    if (!config.clan.sync_enabled) Log.info("[CLAN] Automatic role sync is disabled (clan.sync_enabled)");
+    await step("pending joins", () => checkPendingJoins(client, db, /** @type {import("../service/clan/roster.js").Roster} */ (mainRoster), guildId));
+    if (config.clan.sync_enabled) await step("sync", () => runClanSync(client, guildId));
 };
 
 export default clanDaily;
