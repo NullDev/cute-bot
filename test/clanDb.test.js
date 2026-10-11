@@ -13,7 +13,7 @@ import { createClanDb } from "../src/service/clan/db.js";
 test("createClanDb creates all tables", () => {
     const db = createClanDb(":memory:");
     const names = db.prepare("select name from sqlite_master where type = 'table' and name not like 'sqlite_%' order by name").all().map(r => r.name);
-    assert.deepEqual(names, ["applications", "player_names", "players", "snapshots", "turf_days"]);
+    assert.deepEqual(names, ["applications", "player_names", "players", "snapshots", "turf_days", "turf_watch_log", "turf_watch_state"]);
 });
 
 test("players enforces one discord user per player id", () => {

@@ -50,6 +50,19 @@ create table if not exists turf_days (
     games     integer not null default 0,
     primary key (player_id, day)
 );
+create table if not exists turf_watch_state (
+    day        integer not null,
+    map_id     integer not null,
+    state      text    not null,
+    updated_at integer not null,
+    primary key (day, map_id)
+);
+create table if not exists turf_watch_log (
+    day       integer not null,
+    key       text    not null,
+    posted_at integer not null,
+    primary key (day, key)
+);
 create table if not exists applications (
     id          integer primary key autoincrement,
     guild_id    text    not null,
