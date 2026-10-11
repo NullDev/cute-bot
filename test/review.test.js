@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_REVIEW, computeRefs, scoreMember, reviewClan } from "../src/service/clan/review.js";
+import { DEFAULT_REVIEW, computeRefs, scoreMember, reviewClan, explainMember } from "../src/service/clan/review.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -63,7 +63,9 @@ test("computeRefs takes medians over active members", () => {
         { ...base, s7: 30, turf14Kills: 3, turf14Games: 1 },
         { ...base, s7: 0, turf14Kills: 0, turf14Games: 0 },
     ]);
-    assert.deepEqual(refsOut, { refS7: 20, refTurf: 2, refDelta: 1 });
+    assert.equal(refsOut.refS7, 20);
+    assert.equal(refsOut.refTurf, 2);
+    assert.equal(refsOut.refDelta, 1);
 });
 
 test("reviewClan sorts kick first and summarises", () => {
@@ -75,3 +77,51 @@ test("reviewClan sorts kick first and summarises", () => {
     assert.deepEqual(out.rows.map(r => r.review.verdict), ["kick", "watch", "keep"]);
     assert.deepEqual(out.summary, { total: 3, kick: 1, watch: 1, keep: 1, protectedInactive: 1 });
 });
+
+test("computeRefs also reports clan medians for level, kdr and kpg over all members", () => {
+    const refsOut = computeRefs([
+        { ...base, level: 10, kdr: 0.5, kpg: 2 },
+        { ...base, level: 30, kdr: 1.5, kpg: 6 },
+        { ...base, level: 50, kdr: 2.5, kpg: 10, s7: 0, turf14Kills: 0, turf14Games: 0 },
+    ]);
+    assert.equal(refsOut.medLevel, 30);
+    assert.equal(refsOut.medKdr, 1.5);
+    assert.equal(refsOut.medKpg, 6);
+});
+
+test("scoreMember exposes the term values", () => {
+    const r = scoreMember(base, refs, DEFAULT_REVIEW);
+    assert.deepEqual(r.terms.map(t => t.name), ["level", "nukes", "kdr", "kpg", "rank", "s7", "turf", "delta"]);
+    assert.ok(r.terms.every(t => typeof t.value === "number"));
+});
+
+test("explainMember writes the activity and paper reasoning against the clan medians", () => {
+    const row = { ...base, playerName: "CHHG", level: 14, kdr: 0.78, kpg: 3.3, s7: 76330, turf14Kills: 790, turf14Games: 110, linked: false, rankedRank: 3 };
+    const fullRefs = { refS7: 90625, refTurf: 296, refDelta: 1, medLevel: 30, medKdr: 1.5, medKpg: 7 };
+    const result = scoreMember(row, fullRefs, DEFAULT_REVIEW);
+    const text = explainMember(row, result, fullRefs, DEFAULT_REVIEW).join("\n");
+    for (const expected of [
+        "Played 110 turf games with 790 kills in the last 14 days",
+        "2.7x the clan median of 296",
+        "76,330 clan score in the last 7 days",
+        "below the median of 90,625",
+        "Level 14, below the clan median of 30",
+        "KDR 0.78 is below 1.0",
+        "3.3 kills per game",
+        "No nukes",
+        "Not linked on Discord",
+        "Verdict KEEP",
+        "Activity carries this verdict",
+    ]) assert.ok(text.includes(expected), `expected "${expected}" in:\n${text}`);
+});
+
+test("explainMember explains an inactive protected member", () => {
+    const row = { ...base, playerName: "Amox", level: 112, nukes: 749, kdr: 6.05, s7: 0, turf14Kills: 0, turf14Games: 0 };
+    const fullRefs = { ...refs, medLevel: 30, medKdr: 1.5, medKpg: 7 };
+    const result = scoreMember(row, fullRefs, DEFAULT_REVIEW);
+    const text = explainMember(row, result, fullRefs, DEFAULT_REVIEW).join("\n");
+    assert.ok(text.includes("No clan score in the last 7 days and no turf games in the last 14 days"), text);
+    assert.ok(text.includes("Protected from a kick"), text);
+    assert.ok(text.includes("Verdict WATCH"), text);
+});
+
