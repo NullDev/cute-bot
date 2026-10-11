@@ -60,6 +60,9 @@ export const createDispatcher = function(proxyUrl){
 const MAX_ATTEMPTS = 4;
 const BACKOFF_MS = 300;
 const RATE_LIMIT_PAUSE_MS = 5000;
+const RATE_LIMIT_MAX_WAIT_MS = 60000;
+const RATE_LIMIT_MAX_WAITS = 5;
+const MAX_SPACING_MS = 2000;
 
 /**
  * Whole UTC days since the turf season epoch
@@ -142,6 +145,7 @@ export class KrunkerApi {
      */
     async get(path){
         let lastStatus = 0;
+        let rateLimitWaits = 0;
         for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++){
             await this.#space();
             let res;
@@ -155,7 +159,13 @@ export class KrunkerApi {
             }
             lastStatus = res.status;
             if (res.status === 429){
-                await this.sleep(RATE_LIMIT_PAUSE_MS);
+                if (rateLimitWaits >= RATE_LIMIT_MAX_WAITS) break;
+                const retryAfter = Number(res.headers?.get?.("retry-after")) * 1000;
+                const wait = Math.min(retryAfter > 0 ? retryAfter : RATE_LIMIT_PAUSE_MS * (2 ** rateLimitWaits), RATE_LIMIT_MAX_WAIT_MS);
+                rateLimitWaits++;
+                this.spacingMs = Math.min(this.spacingMs * 2, MAX_SPACING_MS);
+                await this.sleep(wait);
+                attempt--;
                 continue;
             }
             if (RETRY_STATUSES.has(res.status)){
@@ -167,7 +177,7 @@ export class KrunkerApi {
             if (res.status < 200 || res.status >= 300) throw new KrunkerApiError(`gapi ${path} answered ${res.status}`, res.status);
             return { status: res.status, data: body?.data ?? null, error: body?.error ?? null };
         }
-        throw new KrunkerApiError(`gapi ${path} failed after ${MAX_ATTEMPTS} attempts (last status ${lastStatus})`, lastStatus);
+        throw new KrunkerApiError(`gapi ${path} failed after ${MAX_ATTEMPTS} attempts and ${rateLimitWaits} rate-limit waits (last status ${lastStatus})`, lastStatus);
     }
 
     /**

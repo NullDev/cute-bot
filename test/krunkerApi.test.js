@@ -22,9 +22,11 @@ const fakeFetch = function(responses){
         if (!next) throw new Error("no more responses");
         if (next.throws) throw new Error("network down");
         assert.equal(init.headers.Authorization, undefined);
+        const headers = Object.fromEntries(Object.entries(next.headers ?? {}).map(([k, v]) => [k.toLowerCase(), String(v)]));
         return {
             status: next.status,
             ok: next.status >= 200 && next.status < 300,
+            headers: { get: (/** @type {string} */ name) => headers[name.toLowerCase()] ?? null },
             json: async() => next.body ?? {},
         };
     };
@@ -72,16 +74,38 @@ test("get retries network errors and 5xx then throws KrunkerApiError", async() =
     assert.equal(calls.length, 4);
 });
 
-test("get waits and retries on 429", async() => {
+test("get waits and retries on 429, honours Retry-After, and slows its pacing afterwards", async() => {
     const slept = [];
     const { fetchFn } = fakeFetch([
-        { status: 429, body: { error: "Rate limit exceeded. Try again later." } },
+        { status: 429, headers: { "retry-after": "7" }, body: { error: "Rate limit exceeded. Try again later." } },
         { status: 200, body: { data: { ok: true } } },
     ]);
-    const api = new KrunkerApi({ fetchFn, sleep: async ms => { slept.push(ms); } });
+    const api = new KrunkerApi({ fetchFn, sleep: async ms => { slept.push(ms); }, spacingMs: 200 });
     const res = await api.get("/x");
     assert.deepEqual(res.data, { ok: true });
-    assert.ok(slept.includes(5000));
+    assert.ok(slept.includes(7000), "Retry-After seconds are honoured");
+    assert.equal(api.spacingMs, 400, "pacing doubles after a rate limit");
+});
+
+test("repeated 429s back off exponentially and do not count as ordinary attempts", async() => {
+    const slept = [];
+    const { fetchFn, calls } = fakeFetch([
+        { status: 429 }, { status: 429 }, { status: 429 }, { status: 429 }, { status: 429 },
+        { status: 200, body: { data: { ok: true } } },
+    ]);
+    const api = new KrunkerApi({ fetchFn, sleep: async ms => { slept.push(ms); }, spacingMs: 200 });
+    const res = await api.get("/x");
+    assert.deepEqual(res.data, { ok: true });
+    assert.equal(calls.length, 6);
+    const waits = slept.filter(ms => ms >= 5000);
+    assert.deepEqual(waits, [5000, 10000, 20000, 40000, 60000]);
+    assert.equal(api.spacingMs, 2000, "pacing is capped");
+});
+
+test("a 429 that never clears throws KrunkerApiError with status 429", async() => {
+    const { fetchFn } = fakeFetch(Array.from({ length: 6 }, () => ({ status: 429 })));
+    const api = new KrunkerApi({ fetchFn, sleep: noSleep });
+    await assert.rejects(() => api.get("/x"), err => err instanceof KrunkerApiError && err.status === 429);
 });
 
 test("getTurfPlayers passes the day as query", async() => {
