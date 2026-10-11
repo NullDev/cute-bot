@@ -52,8 +52,8 @@ const clanDaily = async function(client, { force = false } = {}){
 
     const snapshotToday = force || !hasSnapshotForDay(db, day);
     if (!snapshotToday) Log.info(`[CLAN] Snapshot for day ${day} exists, skipping`);
-    const turfEmpty = !db.prepare("select 1 from turf_days limit 1").get();
-    const from = turfEmpty ? day - TURF_BACKFILL_DAYS + 1 : day - 1;
+    // the full review window every night, per clan: idempotent upserts, and gaps heal themselves
+    const from = day - TURF_BACKFILL_DAYS + 1;
 
     /** @type {import("../service/clan/roster.js").Roster | null} */
     let mainRoster = null;
