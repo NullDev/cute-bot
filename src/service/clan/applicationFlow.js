@@ -260,8 +260,19 @@ export const handleApplicationSubmit = async function(interaction){
         for (const emoji of VOTE_REACTIONS) await message.react(emoji).catch(() => null);
         setApplicationMessage(db, id, channel.id, message.id);
         // a thread per application for the reviewers to talk in; failures (missing permission) do not block the application
-        await message.startThread({ name: `#${id} ${app.playerName}`.slice(0, 100), autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek })
+        const thread = await message.startThread({ name: `#${id} ${app.playerName}`.slice(0, 100), autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek })
             .catch(e => Log.warn(`[CLAN] Could not start a thread for application #${id}: ${e instanceof Error ? e.message : String(e)}`));
+        if (thread){
+            // the evaluation opens the discussion
+            try {
+                const evaluation = await evaluatePlayer({ db, api, guildId: interaction.guildId, clan, profile });
+                await thread.send({ embeds: [buildEvaluationEmbed({ ...evaluation, profile })] });
+            }
+            catch (e){
+                Log.warn(`[CLAN] Could not post the evaluation for application #${id}: ${e instanceof Error ? e.message : String(e)}`);
+                await thread.send("The evaluation could not be generated right now; use the Show Evaluation button on the application.").catch(() => null);
+            }
+        }
     }
     catch (error){
         db.prepare("delete from applications where id = ?").run(id);
