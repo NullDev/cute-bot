@@ -1,6 +1,6 @@
 import { config } from "../../../config/config.js";
 import { levelFromScore, turfDay } from "./krunkerApi.js";
-import { listLinks, getLinkByPlayer } from "./identity.js";
+import { listLinks } from "./identity.js";
 import { fetchRoster } from "./roster.js";
 import { computeRefs, computeScoreMedians, scoreMember, DEFAULT_REVIEW } from "./review.js";
 import { buildReviewRows } from "./reviewReport.js";
@@ -32,16 +32,15 @@ export const turf14FromContributions = function(rows, day){
  *
  * @param {any} profile
  * @param {{ kills: number, games: number }} turf14
- * @param {boolean} linked
  * @return {import("./review.js").ReviewRow}
  */
-export const applicantRow = function(profile, turf14, linked){
+export const applicantRow = function(profile, turf14){
     const kills = Number(profile.player_kills) || 0;
     return {
         playerId: profile.player_id,
         playerName: profile.player_name,
         rank: 0,
-        linked,
+        linked: true, // not a member: the Discord link penalty does not apply
         level: levelFromScore(profile.player_score),
         kdr: kills / Math.max(Number(profile.player_deaths) || 0, 1),
         kpg: kills / Math.max(Number(profile.player_games_played) || 0, 1),
@@ -85,7 +84,7 @@ export const evaluatePlayer = async function({ db, api, guildId, profile }){
     if (!row){
         const contributions = await api.getTurfContributions(profile.player_id).catch(() => []);
         turf14 = turf14FromContributions(contributions, day);
-        row = applicantRow(profile, turf14, !!getLinkByPlayer(db, guildId, profile.player_id));
+        row = applicantRow(profile, turf14);
     }
     const result = scoreMember(row, refs, cfg);
     const turf = await api.getTurfPlayer(profile.player_id).catch(() => null);

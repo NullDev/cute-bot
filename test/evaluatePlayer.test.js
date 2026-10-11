@@ -28,15 +28,17 @@ test("turf14FromContributions sums only the last 14 days and notes the clans pla
 });
 
 test("applicantRow leaves the clan score unknown and the scorer credits it at the median", () => {
-    const row = applicantRow(PROFILE, { kills: 600, games: 50 }, false);
+    const row = applicantRow(PROFILE, { kills: 600, games: 50 });
     assert.equal(row.s7, null);
+    assert.equal(row.linked, true, "no link penalty for non-members");
     assert.equal(row.level, 42);
     assert.equal(row.kdr, 2);
     const result = scoreMember(row, REFS, DEFAULT_REVIEW);
     assert.equal(result.inactive, false);
-    assert.equal(result.terms.find(t => t.name === "s7")?.value, DEFAULT_REVIEW.weights.s7);
+    assert.equal(result.terms.find(t => t.name === "s7")?.value, 0, "unknown clan score gets no credit");
     const text = explainMember(row, result, REFS, DEFAULT_REVIEW).join("\n");
-    assert.ok(text.includes("only tracked for members"), text);
+    assert.ok(text.includes("gets no credit"), text);
+    assert.ok(text.includes("No Discord link penalty"), text);
     assert.ok(text.includes("Would-be verdict ACCEPT"), text);
     assert.ok(!text.includes("Verdict KEEP"), text);
 });
@@ -49,7 +51,7 @@ test("applicantVerdict maps keep to accept and the rest to deny", () => {
 
 test("evaluation embed shows a would-be verdict and the clans played for when not a member", () => {
     const turf14 = { kills: 600, games: 50, clans: { TWZY: 50 } };
-    const row = applicantRow(PROFILE, turf14, false);
+    const row = applicantRow(PROFILE, turf14);
     const result = scoreMember(row, REFS, DEFAULT_REVIEW);
     const embed = buildEvaluationEmbed({ row, result, refs: REFS, cfg: DEFAULT_REVIEW, profile: PROFILE, turf: null, turf14, member: false }).toJSON();
     assert.ok(embed.description.includes("Would-be verdict: **ACCEPT**"), embed.description);
@@ -57,3 +59,12 @@ test("evaluation embed shows a would-be verdict and the clans played for when no
     assert.ok(recent.includes("played for [TWZY] 50 games"), recent);
     assert.ok(recent.includes("members only"), recent);
 });
+
+test("a high level applicant with no recent turf is a borderline deny", () => {
+    const veteran = { ...PROFILE, player_score: 27400000, player_kills: 232443, player_deaths: 236468, player_games_played: 36924, player_stats: { n: 6 } };
+    const row = applicantRow(veteran, { kills: 25, games: 2 });
+    const result = scoreMember(row, REFS, DEFAULT_REVIEW);
+    assert.equal(result.verdict, "watch");
+    assert.deepEqual(applicantVerdict(result.verdict), { label: "DENY", borderline: true });
+});
+

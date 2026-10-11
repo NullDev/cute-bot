@@ -24,7 +24,9 @@ const breakdown = function(row, result){
     const lines = result.terms.map(t => `${t.name.padEnd(7)} ${sign(t.value).padStart(6)}  ${t.text}`);
     lines.push("");
     lines.push(`paper ${sign(result.paper)}  activity ${sign(result.activity)}  bonus ${sign(result.bonus)}`);
-    lines.push(`total ${sign(result.total)}  ${row.linked ? "linked" : "not linked"}${result.protected ? "  protected" : ""}`);
+    let standing = row.linked ? "linked" : "not linked";
+    if (row.s7 === null) standing = "non-member";
+    lines.push(`total ${sign(result.total)}  ${standing}${result.protected ? "  protected" : ""}`);
     return "```\n" + lines.join("\n") + "\n```";
 };
 
@@ -42,7 +44,7 @@ export const buildEvaluationEmbed = function({ row, result, refs, cfg, profile, 
     }
     else {
         const would = applicantVerdict(result.verdict);
-        headline = `Would-be verdict: **${would.label}**${would.borderline ? " (borderline)" : ""} · total **${result.total.toFixed(2)}**, accept from ${cfg.thresholds.watch}. Not a member: the 7-day clan score is credited at the median.`;
+        headline = `Would-be verdict: **${would.label}**${would.borderline ? " (borderline)" : ""} · total **${result.total.toFixed(2)}**, accept from ${cfg.thresholds.watch}. Not a member: the 7-day clan score counts as 0, turf is the only activity.`;
     }
 
     const turfLine = `Turf 14 days **${num(row.turf14Kills)}** kills in **${num(row.turf14Games)}** games (median ${num(refs.refTurf)} kills)`;
@@ -62,7 +64,7 @@ export const buildEvaluationEmbed = function({ row, result, refs, cfg, profile, 
         .setTitle(`🔎┃Evaluation: ${row.playerName}`)
         .setURL(profileUrl(row.playerName))
         .setColor((member ? VERDICT_COLOR : APPLICANT_COLOR)[result.verdict] ?? defaults.embed_color)
-        .setDescription(`${headline}\n[profile](${profileUrl(row.playerName)}) · id ${row.playerId}${row.linked ? "" : " · not linked on Discord"}`)
+        .setDescription(`${headline}\n[profile](${profileUrl(row.playerName)}) · id ${row.playerId}${member && !row.linked ? " · not linked on Discord" : ""}`)
         .addFields(
             { name: "Stats", value: statsText(profile) },
             { name: "Turf (this season)", value: turfText(turf) },
