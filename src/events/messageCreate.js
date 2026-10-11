@@ -4,6 +4,7 @@ import { PythonAIWorker } from "../ai/getAiReply.js";
 import { consumeAiReply } from "../ai/aiRateLimit.js";
 import { config } from "../../config/config.js";
 import Log from "../util/log.js";
+import { isMainGuild } from "../service/clan/clans.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -50,6 +51,9 @@ const messageCreate = async function(message){
         await devCmd(message);
         return;
     }
+
+    // the AI (learning and replies) only lives on the main server
+    if (!isMainGuild(message.guild.id)) return;
 
     if (
         config.ai_included_channels.includes(message.channelId)
