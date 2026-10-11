@@ -14,7 +14,7 @@ export const DEFAULT_TURF = Object.freeze({
     check_minutes: 30,
     report_hours_utc: [12, 18, 21, 23],
     hold_position: 2,
-    close_margin: 100,
+    close_margin: 150,
     max_pings_per_day: 2,
 });
 
@@ -154,20 +154,22 @@ export const headline = function(maps, cfg){
     const lost = maps.filter(m => m.state === "lost" || m.state === "none");
     const close = maps.filter(m => m.state === "close");
     const list = (/** @type {MapAssessment[]} */ xs) => xs.map(m => m.mapName).join(xs.length === 2 ? " and " : ", ").replace(/, ([^,]*)$/, " and $1");
+    // one item reads as a sentence, several as bullet points
+    const lines = (/** @type {string[]} */ items) => (items.length === 1 ? ` ${items[0]}.` : "\n" + items.map(i => `• ${i}`).join("\n"));
 
-    if (!held.length){
-        const needs = lost.filter(m => m.deficit !== null && m.target).map(m => `${m.mapName} needs ${num(/** @type {number} */ (m.deficit))} more kills to pass ${m.target}`);
-        return `🚨 We are not holding any map right now. ${needs.join(", ")}.`;
-    }
     const warnings = close.map(m => (m.position === 1
         ? `${m.chaser} is only ${num(/** @type {number} */ (m.lead))} kills behind us on ${m.mapName}, our first place is at risk`
         : `${m.chaser} is only ${num(/** @type {number} */ (m.lead))} kills away from taking our ${ordinal(/** @type {number} */ (m.position))} place on ${m.mapName}`));
+    const gaps = lost.map(m => (m.deficit !== null && m.target
+        ? `${m.target} is ${num(/** @type {number} */ (m.deficit) - 1)} kills ahead of us for #${cfg.hold_position} on ${m.mapName}, we need ${num(/** @type {number} */ (m.deficit))} more`
+        : `${m.mapName} has no kills from us yet`));
+
+    if (!held.length) return `🚨 We are not holding any map right now.${lines(gaps)}`;
     if (lost.length){
-        const gaps = lost.map(m => (m.deficit !== null && m.target ? `${m.target} is ${num(/** @type {number} */ (m.deficit) - 1)} kills ahead of us for #${cfg.hold_position} on ${m.mapName}` : `${m.mapName} has no kills from us yet`));
-        const base = `We are holding ${list(held)} but not ${list(lost)}: ${gaps.join("; ")}.`;
-        return warnings.length ? `⚠️ ${base} ${warnings.join(". ")}.` : base;
+        const base = `We are holding ${list(held)} but not ${list(lost)}.${lines(gaps)}`;
+        return warnings.length ? `⚠️ ${base}${lines(warnings)}` : base;
     }
-    if (warnings.length) return `⚠️ ${warnings.join(". ")}.`;
+    if (warnings.length) return `⚠️${warnings.length === 1 ? "" : " Our spots are under pressure:"}${lines(warnings)}`;
     return "We are steadily holding turf on all three maps :3";
 };
 

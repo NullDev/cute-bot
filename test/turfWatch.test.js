@@ -29,7 +29,8 @@ const OURS = [
     { map_id: 2, map_name: "Sandstorm", kills: 2958, position: 2 },
     { map_id: 3, map_name: "Subzero", kills: 2645, position: 2 },
 ];
-const CFG = { ...DEFAULT_TURF };
+// the fixtures were written against a 100 kill margin; the shipped default is 150
+const CFG = { ...DEFAULT_TURF, close_margin: 100 };
 
 const standings = () => mergeStandings(STATUS, OURS, "cute", CFG.hold_position);
 
@@ -81,10 +82,13 @@ test("headline wording for the four situations", () => {
     assert.equal(headline(close, CFG), "⚠️ SIBU is only 117 kills away from taking our second place on Subzero.");
 
     const mixed = safe.map(m => (m.mapName === "Sandstorm" ? { ...m, state: "lost", position: 3, lead: null, chaser: null, deficit: 86, target: "SIBU" } : m));
-    assert.equal(headline(mixed, CFG), "We are holding Burg and Subzero but not Sandstorm: SIBU is 85 kills ahead of us for #2 on Sandstorm.");
+    assert.equal(headline(mixed, CFG), "We are holding Burg and Subzero but not Sandstorm. SIBU is 85 kills ahead of us for #2 on Sandstorm, we need 86 more.");
 
     const none = safe.map(m => ({ ...m, state: "lost", position: 4, lead: null, chaser: null, deficit: 120, target: "SIBU" }));
-    assert.match(headline(none, CFG), /^🚨 We are not holding any map right now\. Burg needs 120 more kills to pass SIBU/);
+    assert.equal(headline(none, CFG), "🚨 We are not holding any map right now.\n• SIBU is 119 kills ahead of us for #2 on Burg, we need 120 more\n• SIBU is 119 kills ahead of us for #2 on Sandstorm, we need 120 more\n• SIBU is 119 kills ahead of us for #2 on Subzero, we need 120 more");
+
+    const allClose = assessTurf(standings(), { hold_position: 2, close_margin: 400 });
+    assert.equal(headline(allClose, CFG), "⚠️ Our spots are under pressure:\n• SIBU is only 272 kills away from taking our second place on Burg\n• SIBU is only 196 kills away from taking our second place on Sandstorm\n• SIBU is only 117 kills away from taking our second place on Subzero");
 
     const first = { ...safe[0], position: 1, state: "close", lead: 40, chaser: "TWZY" };
     assert.equal(headline([first], CFG), "⚠️ TWZY is only 40 kills behind us on Burg, our first place is at risk.");
@@ -150,5 +154,11 @@ test("role pings stop after the daily budget", () => {
     finally {
         config.ids.clan.turf_role = saved;
     }
+});
+
+test("the shipped close margin is 150 kills", () => {
+    assert.equal(DEFAULT_TURF.close_margin, 150);
+    const a = assessTurf(standings(), DEFAULT_TURF);
+    assert.deepEqual(a.map(m => m.state), ["safe", "safe", "close"]);
 });
 

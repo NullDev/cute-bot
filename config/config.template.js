@@ -37,7 +37,7 @@ export default {
             check_minutes: 30,
             report_hours_utc: [12, 18, 21, 23],
             hold_position: 2,
-            close_margin: 100,
+            close_margin: 150,
             max_pings_per_day: 2,
         },
         review: {
