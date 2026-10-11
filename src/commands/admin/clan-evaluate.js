@@ -4,7 +4,7 @@ import { api, turfDay, levelFromScore } from "../../service/clan/krunkerApi.js";
 import { getClanDb } from "../../service/clan/db.js";
 import { listLinks, getLinkByDiscord, getLinkByPlayer } from "../../service/clan/identity.js";
 import { fetchRoster } from "../../service/clan/roster.js";
-import { computeRefs, scoreMember, DEFAULT_REVIEW } from "../../service/clan/review.js";
+import { computeRefs, computeScoreMedians, scoreMember, DEFAULT_REVIEW } from "../../service/clan/review.js";
 import { buildReviewRows } from "../../service/clan/reviewReport.js";
 import { buildEvaluationEmbed } from "../../service/clan/evaluate.js";
 
@@ -86,8 +86,9 @@ export default {
         }
 
         const rows = buildReviewRows(db, roster, listLinks(db, guildId), turfDay());
-        const refs = computeRefs(rows);
         const cfg = { ...DEFAULT_REVIEW, ...(config.clan.review ?? {}) };
+        const baseRefs = computeRefs(rows);
+        const refs = { ...baseRefs, ...computeScoreMedians(rows, baseRefs, cfg) };
         const memberRow = rows.find(r => r.playerId === profile.player_id);
         const row = memberRow ?? rowFromProfile(profile, !!getLinkByPlayer(db, guildId, profile.player_id));
         const result = scoreMember(row, refs, cfg);

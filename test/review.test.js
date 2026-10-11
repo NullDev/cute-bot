@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_REVIEW, computeRefs, scoreMember, reviewClan, explainMember } from "../src/service/clan/review.js";
+import { DEFAULT_REVIEW, computeRefs, scoreMember, reviewClan, explainMember, computeScoreMedians } from "../src/service/clan/review.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -97,7 +97,7 @@ test("scoreMember exposes the term values", () => {
 
 test("explainMember writes the activity and paper reasoning against the clan medians", () => {
     const row = { ...base, playerName: "CHHG", level: 14, kdr: 0.78, kpg: 3.3, s7: 76330, turf14Kills: 790, turf14Games: 110, linked: false, rankedRank: 3 };
-    const fullRefs = { refS7: 90625, refTurf: 296, refDelta: 1, medLevel: 30, medKdr: 1.5, medKpg: 7 };
+    const fullRefs = { refS7: 90625, refTurf: 296, refDelta: 1, medLevel: 30, medKdr: 1.5, medKpg: 7, medPaper: 1.0, medActivity: 2.5 };
     const result = scoreMember(row, fullRefs, DEFAULT_REVIEW);
     const text = explainMember(row, result, fullRefs, DEFAULT_REVIEW).join("\n");
     for (const expected of [
@@ -111,8 +111,28 @@ test("explainMember writes the activity and paper reasoning against the clan med
         "No nukes",
         "Not linked on Discord",
         "Verdict KEEP",
+        "Paper stats score 0.20, below the clan median of 1.00",
         "Activity carries this verdict",
     ]) assert.ok(text.includes(expected), `expected "${expected}" in:\n${text}`);
+});
+
+test("explainMember says both sides are fine for a solid active member", () => {
+    const row = { ...base, level: 28, kdr: 1.81, kpg: 4.0, s7: 136800, turf14Kills: 928, turf14Games: 86, rankedRank: 9 };
+    const fullRefs = { refS7: 80732, refTurf: 296, refDelta: 1, medLevel: 32, medKdr: 1.59, medKpg: 7.1, medPaper: 1.0, medActivity: 2.5 };
+    const result = scoreMember(row, fullRefs, DEFAULT_REVIEW);
+    const text = explainMember(row, result, fullRefs, DEFAULT_REVIEW).join("\n");
+    assert.ok(text.includes("Both paper stats and recent activity are at or above the clan median."), text);
+    assert.ok(!text.includes("would not reach the keep line"), text);
+});
+
+test("computeScoreMedians reports the clan median paper and activity scores", () => {
+    const meds = computeScoreMedians([
+        { ...base, level: 10, kdr: 0.8 },
+        { ...base, level: 60, kdr: 2.5, nukes: 30 },
+        { ...base, s7: 0, turf14Kills: 0, turf14Games: 0 },
+    ], refs, DEFAULT_REVIEW);
+    assert.ok(meds.medPaper > 0);
+    assert.ok(meds.medActivity > 0);
 });
 
 test("explainMember explains an inactive protected member", () => {

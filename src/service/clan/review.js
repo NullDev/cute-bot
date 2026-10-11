@@ -128,6 +128,23 @@ export const scoreMember = function(row, refs, cfg){
 };
 
 /**
+ * Clan medians of the paper and activity scores, to say which side carries a verdict
+ *
+ * @param {ReviewRow[]} rows
+ * @param {ReturnType<typeof computeRefs>} refs
+ * @param {typeof DEFAULT_REVIEW} cfg
+ * @return {{ medPaper: number, medActivity: number }}
+ */
+export const computeScoreMedians = function(rows, refs, cfg){
+    const scored = rows.map(r => scoreMember(r, refs, cfg));
+    const active = scored.filter(s => !s.inactive);
+    return {
+        medPaper: scored.length ? median(scored.map(s => s.paper)) : 0,
+        medActivity: active.length ? median(active.map(s => s.activity)) : 0,
+    };
+};
+
+/**
  * @param {number} n
  * @return {string}
  */
@@ -153,7 +170,7 @@ const relation = function(value, ref){
  *
  * @param {ReviewRow} row
  * @param {ReturnType<typeof scoreMember>} result
- * @param {ReturnType<typeof computeRefs>} refs
+ * @param {ReturnType<typeof computeRefs> & Partial<ReturnType<typeof computeScoreMedians>>} refs
  * @param {typeof DEFAULT_REVIEW} cfg
  * @return {string[]}
  */
@@ -199,9 +216,14 @@ export const explainMember = function(row, result, refs, cfg){
     // verdict
     const total = result.total.toFixed(2);
     lines.push(`Verdict ${result.verdict.toUpperCase()} with a total of ${total} (paper ${result.paper.toFixed(2)}, activity ${result.activity.toFixed(2)}, bonus ${result.bonus.toFixed(2)}); watch below ${cfg.thresholds.watch}, kick below ${cfg.thresholds.kick}.`);
-    if (result.verdict === "keep" && !result.inactive){
-        if (result.paper < cfg.thresholds.watch && result.activity >= cfg.thresholds.watch) lines.push("Activity carries this verdict: on paper alone this member would not reach the keep line.");
-        else if (result.activity < cfg.thresholds.watch && result.paper >= cfg.thresholds.watch) lines.push("Paper stats carry this verdict: the recent activity alone would not reach the keep line.");
+    if (!result.inactive && refs.medPaper !== undefined && refs.medActivity !== undefined){
+        const paperRel = relation(result.paper, refs.medPaper);
+        const activityRel = relation(result.activity, refs.medActivity);
+        lines.push(`Paper stats score ${result.paper.toFixed(2)}, ${paperRel} the clan median of ${refs.medPaper.toFixed(2)}; recent activity scores ${result.activity.toFixed(2)}, ${activityRel} the clan median of ${refs.medActivity.toFixed(2)}.`);
+        if (activityRel === "above" && paperRel === "below") lines.push("Activity carries this verdict: the member plays a lot but looks weaker than the clan on paper.");
+        else if (paperRel === "above" && activityRel === "below") lines.push("Paper stats carry this verdict: the member looks good on paper but has been quieter than the clan lately.");
+        else if (paperRel !== "below" && activityRel !== "below") lines.push("Both paper stats and recent activity are at or above the clan median.");
+        else lines.push("Both paper stats and recent activity are below the clan median.");
     }
     return lines;
 };
