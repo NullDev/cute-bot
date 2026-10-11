@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildApplicationEmbed, decisionComponents, profileUrl } from "../src/service/clan/applicationFlow.js";
+import { buildApplicationEmbed, decisionComponents, profileUrl, interviewChannelName, interviewOverwrites } from "../src/service/clan/applicationFlow.js";
+import { PermissionFlagsBits } from "discord.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -47,11 +48,31 @@ test("application embed copes with no profile and no turf data", () => {
 
 test("decision row carries a profile link button next to Accept and Reject", () => {
     const row = decisionComponents(7, false, profileUrl("NulPing")).toJSON();
-    assert.deepEqual(row.components.map(c => c.label), ["Accept", "Reject", "Evaluation", "Profile"]);
+    assert.deepEqual(row.components.map(c => c.label), ["Accept", "Reject", "Evaluation", "Interview", "Profile"]);
     assert.equal(row.components[2].custom_id, "application_eval:7");
-    assert.equal(row.components[3].url, profileUrl("NulPing"));
-    assert.equal(row.components[3].disabled, undefined);
+    assert.equal(row.components[3].custom_id, "application_interview:7");
+    assert.equal(row.components[4].url, profileUrl("NulPing"));
+    assert.equal(row.components[4].disabled, undefined);
     const done = decisionComponents(7, true, profileUrl("NulPing")).toJSON();
     assert.deepEqual(done.components.slice(0, 2).map(c => c.disabled), [true, true]);
     assert.equal(done.components[2].disabled, undefined, "evaluation stays available after a decision");
 });
+
+test("interview channel names are discord-safe", () => {
+    assert.equal(interviewChannelName(12, "YA BOI ALI-A"), "app-12-ya-boi-ali-a");
+    assert.equal(interviewChannelName(3, "영구기♥동혀니"), "app-3");
+    assert.ok(interviewChannelName(1, "x".repeat(200)).length <= 100);
+});
+
+test("interview overwrites hide the channel and open it to the applicant, the roles and the bot", () => {
+    const ow = interviewOverwrites({ guildId: "g", applicantId: "a", botId: "b", roleIds: ["r1", "", "r2"] });
+    assert.deepEqual(ow.map(o => o.id), ["g", "a", "b", "r1", "r2"]);
+    assert.deepEqual(ow[0].deny, [PermissionFlagsBits.ViewChannel]);
+    for (const o of ow.slice(1)){
+        assert.ok(o.allow.includes(PermissionFlagsBits.ViewChannel));
+        assert.ok(o.allow.includes(PermissionFlagsBits.SendMessages));
+        assert.ok(o.allow.includes(PermissionFlagsBits.AttachFiles));
+    }
+    assert.ok(ow[2].allow.includes(PermissionFlagsBits.ManageChannels));
+});
+

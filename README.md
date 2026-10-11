@@ -72,6 +72,8 @@ Once the config has been copied like described in [Step 4](#wrench-setup), it ca
 | ids: clan: <br> `recruit`, `soldier`, `captain` | Clan rank roles, applied cumulatively from the in-game rank | string | N/A |
 | ids: clan: <br> `applications_role` | Role that may accept or reject applications | string | N/A |
 | ids: clan: <br> `applications_channel` | Channel where applications are posted and decided | string | N/A |
+| ids: clan: <br> `applications_role_review` | Second role that is pinged on new applications and gets access to follow-up channels (cannot decide) | string | N/A |
+| ids: clan: <br> `clan_category` | Category where the Interview button creates follow-up channels for an applicant and the application roles | string | N/A |
 | clan: <br> `main_server` | Guild id of the server where everything runs (verify, applications, role sync, AI) | string | N/A |
 | clan: <br> `clans` | One entry per clan: `{ discord, id, name, target_size? }` with the clan's Discord server id, Krunker clan id and tag. Servers other than `main_server` only get `/clan-review`, `/clan-evaluate`, `/help` and `/info`; everything else answers "This command is not available here." | object-array | [] |
 | clan: review: <br> `grace_days` | Members first seen on the roster fewer than this many days ago are kept regardless of stats | number | 7 |

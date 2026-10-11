@@ -14,7 +14,9 @@ export default {
             soldier: "",
             captain: "",
             applications_role: "",
+            applications_role_review: "",
             applications_channel: "",
+            clan_category: "",
         },
     },
     clan: {

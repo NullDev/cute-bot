@@ -1,5 +1,5 @@
 import {
-    ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ThreadAutoArchiveDuration,
+    ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, MessageFlags, ModalBuilder, PermissionFlagsBits, TextInputBuilder, TextInputStyle, ThreadAutoArchiveDuration,
 } from "discord.js";
 import Log from "../../util/log.js";
 import defaults from "../../util/defaults.js";
@@ -15,7 +15,7 @@ import { getClanDb } from "./db.js";
 import { getLinkByDiscord, suggestIgns } from "./identity.js";
 import { fetchRoster, rosterByPlayerId } from "./roster.js";
 import { syncOneMember } from "./sync.js";
-import { canApply, createApplication, setApplicationMessage, getApplication, finalizeDecision } from "./applications.js";
+import { canApply, createApplication, setApplicationMessage, getApplication, finalizeDecision, setInterviewChannel } from "./applications.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -27,6 +27,8 @@ export const ACCEPT_PREFIX = "application_accept:";
 export const REJECT_PREFIX = "application_reject:";
 export const REJECT_MODAL_PREFIX = "application_reject_modal:";
 export const EVALUATE_PREFIX = "application_eval:";
+export const INTERVIEW_PREFIX = "application_interview:";
+export const INTERVIEW_CLOSE_PREFIX = "application_interview_close:";
 export const VOTE_REACTIONS = ["👍", "👎"];
 
 const FIELDS = [
@@ -62,9 +64,50 @@ export const decisionComponents = function(id, disabled, url){
         new ButtonBuilder().setCustomId(REJECT_PREFIX + id).setLabel("Reject").setStyle(ButtonStyle.Danger).setDisabled(disabled),
     );
     row.addComponents(new ButtonBuilder().setCustomId(EVALUATE_PREFIX + id).setLabel("Evaluation").setStyle(ButtonStyle.Secondary));
+    row.addComponents(new ButtonBuilder().setCustomId(INTERVIEW_PREFIX + id).setLabel("Interview").setStyle(ButtonStyle.Secondary));
     if (url) row.addComponents(new ButtonBuilder().setLabel("Profile").setStyle(ButtonStyle.Link).setURL(url));
     return row;
 };
+
+/**
+ * Discord channel name for a follow-up channel: lowercase, dashes, at most 100 chars
+ *
+ * @param {number} id
+ * @param {string} playerName
+ * @return {string}
+ */
+export const interviewChannelName = function(id, playerName){
+    const slug = playerName.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+    return `app-${id}${slug ? `-${slug}` : ""}`.slice(0, 100);
+};
+
+const INTERVIEW_ALLOW = [
+    PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory,
+    PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.UseExternalEmojis,
+    PermissionFlagsBits.UseExternalStickers, PermissionFlagsBits.AddReactions,
+];
+
+/**
+ * Permission overwrites of a follow-up channel: hidden from everyone, open to the applicant, both application roles and the bot
+ *
+ * @param {{ guildId: string, applicantId: string, botId: string, roleIds: string[] }} input
+ * @return {Array<{ id: string, allow?: bigint[], deny?: bigint[] }>}
+ */
+export const interviewOverwrites = function({ guildId, applicantId, botId, roleIds }){
+    return [
+        { id: guildId, deny: [PermissionFlagsBits.ViewChannel] },
+        { id: applicantId, allow: INTERVIEW_ALLOW },
+        { id: botId, allow: [...INTERVIEW_ALLOW, PermissionFlagsBits.ManageChannels] },
+        ...roleIds.filter(Boolean).map(id => ({ id, allow: INTERVIEW_ALLOW })),
+    ];
+};
+
+/**
+ * Role ids pinged on new applications and given access to follow-up channels
+ *
+ * @return {string[]}
+ */
+const reviewerRoleIds = () => [config.ids.clan.applications_role, config.ids.clan.applications_role_review].filter(Boolean);
 
 /**
  * Application embed, with the decision when there is one
@@ -206,7 +249,13 @@ export const handleApplicationSubmit = async function(interaction){
     const app = /** @type {import("./applications.js").Application} */ (getApplication(db, id));
     try {
         const turf = await api.getTurfPlayer(profile.player_id).catch(() => null);
-        const message = await channel.send({ embeds: [buildApplicationEmbed(app, profile, null, turf, clan.name)], components: [decisionComponents(id, false, profileUrl(app.playerName))] });
+        const roleIds = reviewerRoleIds();
+        const message = await channel.send({
+            content: `${roleIds.map(r => `<@&${r}>`).join(" ")} New application from <@${interaction.user.id}>`.trim(),
+            allowedMentions: { roles: roleIds, users: [] },
+            embeds: [buildApplicationEmbed(app, profile, null, turf, clan.name)],
+            components: [decisionComponents(id, false, profileUrl(app.playerName))],
+        });
         // informal vote only, nothing reads these
         for (const emoji of VOTE_REACTIONS) await message.react(emoji).catch(() => null);
         setApplicationMessage(db, id, channel.id, message.id);
@@ -370,6 +419,83 @@ export const handleApplicationEvaluate = async function(interaction){
         Log.warn(`[CLAN] evaluation of application #${id} failed: ${e instanceof Error ? e.message : String(e)}`);
         await whisper(interaction, `Could not evaluate: ${e instanceof Error ? e.message : String(e)}`);
     }
+};
+
+/**
+ * Interview button: open a private follow-up channel for the applicant and the application roles
+ *
+ * @param {import("discord.js").ButtonInteraction} interaction
+ */
+export const handleInterviewOpen = async function(interaction){
+    const { member, guild } = /** @type {{ member: import("discord.js").GuildMember | null, guild: import("discord.js").Guild | null }} */ (interaction);
+    if (!guild || !mayDecide(member, interaction.channelId)){
+        await whisper(interaction, "You are not allowed to open follow-up channels.");
+        return;
+    }
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    const db = getClanDb();
+    const id = Number(interaction.customId.slice(INTERVIEW_PREFIX.length));
+    const app = getApplication(db, id);
+    if (!app){
+        await whisper(interaction, "Unknown application.");
+        return;
+    }
+    if (app.interviewChannelId){
+        const existing = await guild.channels.fetch(app.interviewChannelId).catch(() => null);
+        if (existing){
+            await whisper(interaction, `There is already a follow-up channel: <#${existing.id}>`);
+            return;
+        }
+        setInterviewChannel(db, id, null);
+    }
+    if (!config.ids.clan.clan_category){
+        await whisper(interaction, "No category configured for follow-up channels (ids.clan.clan_category).");
+        return;
+    }
+    const roleIds = reviewerRoleIds();
+    try {
+        const created = await guild.channels.create({
+            name: interviewChannelName(id, app.playerName),
+            type: ChannelType.GuildText,
+            parent: config.ids.clan.clan_category,
+            topic: `Follow-up for application #${id} (${app.playerName})`,
+            permissionOverwrites: interviewOverwrites({ guildId: guild.id, applicantId: app.discordId, botId: interaction.client.user.id, roleIds }),
+            reason: `application #${id} follow-up opened by ${interaction.user.tag}`,
+        });
+        setInterviewChannel(db, id, created.id);
+        await created.send({
+            content: `${roleIds.map(r => `<@&${r}>`).join(" ")} <@${app.discordId}>\nFollow-up for application **#${id}** (\`${app.playerName}\`). Ask your questions here; a reviewer closes this channel with the button when done.`,
+            allowedMentions: { roles: roleIds, users: [app.discordId] },
+            components: [/** @type {ActionRowBuilder<ButtonBuilder>} */ (new ActionRowBuilder()).addComponents(
+                new ButtonBuilder().setCustomId(INTERVIEW_CLOSE_PREFIX + id).setLabel("Close channel").setStyle(ButtonStyle.Danger),
+            )],
+        });
+        await whisper(interaction, `Opened <#${created.id}>`);
+    }
+    catch (e){
+        Log.error("[CLAN] Could not open a follow-up channel: ", e instanceof Error ? e : new Error(String(e)));
+        await whisper(interaction, `Could not open the channel: ${e instanceof Error ? e.message : String(e)}`);
+    }
+};
+
+/**
+ * Close button inside a follow-up channel: deletes the channel
+ *
+ * @param {import("discord.js").ButtonInteraction} interaction
+ */
+export const handleInterviewClose = async function(interaction){
+    const { member } = /** @type {{ member: import("discord.js").GuildMember | null }} */ (interaction);
+    if (!member?.roles.cache.has(config.ids.clan.applications_role)){
+        await whisper(interaction, "You are not allowed to close this channel.");
+        return;
+    }
+    const id = Number(interaction.customId.slice(INTERVIEW_CLOSE_PREFIX.length));
+    await interaction.deferUpdate().catch(() => null);
+    const { channel } = interaction;
+    if (channel && "delete" in channel){
+        await channel.delete(`application #${id} follow-up closed by ${interaction.user.tag}`).catch(e => Log.warn(`[CLAN] Could not delete follow-up channel: ${e instanceof Error ? e.message : String(e)}`));
+    }
+    setInterviewChannel(getClanDb(), id, null);
 };
 
 /**

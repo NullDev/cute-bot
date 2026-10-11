@@ -10,8 +10,8 @@ import { isMainGuild, SHARED_COMMANDS } from "../service/clan/clans.js";
 
 const NOT_HERE = "This command is not available here.";
 import {
-    APPLY_BUTTON, APPLY_MODAL, ACCEPT_PREFIX, REJECT_PREFIX, REJECT_MODAL_PREFIX, EVALUATE_PREFIX,
-    sendApplicationModal, handleApplicationSubmit, handleApplicationDecision, handleRejectModal, handleApplicationEvaluate,
+    APPLY_BUTTON, APPLY_MODAL, ACCEPT_PREFIX, REJECT_PREFIX, REJECT_MODAL_PREFIX, EVALUATE_PREFIX, INTERVIEW_PREFIX, INTERVIEW_CLOSE_PREFIX,
+    sendApplicationModal, handleApplicationSubmit, handleApplicationDecision, handleRejectModal, handleApplicationEvaluate, handleInterviewOpen, handleInterviewClose,
 } from "../service/clan/applicationFlow.js";
 
 // ========================= //
@@ -88,6 +88,8 @@ const handleButtonInteraction = async function(interaction){
     if (interaction.customId === APPLY_BUTTON) await sendApplicationModal(interaction);
     if (interaction.customId.startsWith(ACCEPT_PREFIX) || interaction.customId.startsWith(REJECT_PREFIX)) await handleApplicationDecision(interaction);
     if (interaction.customId.startsWith(EVALUATE_PREFIX)) await handleApplicationEvaluate(interaction);
+    if (interaction.customId.startsWith(INTERVIEW_CLOSE_PREFIX)) await handleInterviewClose(interaction);
+    else if (interaction.customId.startsWith(INTERVIEW_PREFIX)) await handleInterviewOpen(interaction);
     if (interaction.customId === "giveaway_join") await handleGiveawayJoin(interaction);
     if (interaction.customId.startsWith("giveaway_participants")) await handleGiveawayParticipants(interaction);
 };
