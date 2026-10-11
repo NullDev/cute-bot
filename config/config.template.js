@@ -18,9 +18,7 @@ export default {
         },
     },
     clan: {
-        // guild id of the server where everything runs (verify, applications, sync); other servers in `clans` only get the review commands
         main_server: "",
-        // one entry per clan: its Discord server, Krunker clan id and tag; optional target_size per clan
         clans: [
             // { discord: "", id: 0, name: "", target_size: 100 },
         ],

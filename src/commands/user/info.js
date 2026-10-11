@@ -66,7 +66,7 @@ export default {
                 },
                 {
                     name: "Source Code :scroll:",
-                    value: "[NullDev/Cute-Bot](https://github.com/NullDev/cute-bot) (private)",
+                    value: "[NullDev/Cute-Bot](https://github.com/NullDev/cute-bot)",
                     inline: true,
                 },
                 { name: "\u200b", value: "\u200b", inline: true },
