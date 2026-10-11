@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { KrunkerApi, KrunkerApiError, turfDay, levelFromScore, TURF_EPOCH_UTC } from "../src/service/clan/krunkerApi.js";
+import http from "node:http";
+import net from "node:net";
+import { KrunkerApi, KrunkerApiError, createDispatcher, turfDay, levelFromScore, TURF_EPOCH_UTC } from "../src/service/clan/krunkerApi.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -112,5 +114,77 @@ test("proxyUrl routes requests through a proxy dispatcher", async() => {
     await proxied.get("/x");
     assert.ok(inits[1].dispatcher, "dispatcher set when proxyUrl is given");
     assert.equal(inits[1].dispatcher.constructor.name, "ProxyAgent");
+});
+
+/**
+ * Minimal SOCKS5 server (no auth, CONNECT only) that records the destinations it was asked for
+ *
+ * @return {Promise<{ port: number, seen: string[], close: () => void }>}
+ */
+const startSocks5 = async function(){
+    /** @type {string[]} */
+    const seen = [];
+    const server = net.createServer(client => {
+        client.once("data", greeting => {
+            if (greeting[0] !== 5) return client.destroy();
+            client.write(Buffer.from([5, 0]));
+            client.once("data", req => {
+                if (req[0] !== 5 || req[1] !== 1) return client.destroy();
+                let host;
+                let offset;
+                if (req[3] === 1){
+                    host = [...req.subarray(4, 8)].join(".");
+                    offset = 8;
+                }
+                else if (req[3] === 3){
+                    const len = req[4];
+                    host = req.subarray(5, 5 + len).toString();
+                    offset = 5 + len;
+                }
+                else return client.destroy();
+                const port = req.readUInt16BE(offset);
+                seen.push(`${host}:${port}`);
+                const upstream = net.connect(port, host, () => {
+                    client.write(Buffer.from([5, 0, 0, 1, 0, 0, 0, 0, 0, 0]));
+                    upstream.pipe(client);
+                    client.pipe(upstream);
+                });
+                upstream.on("error", () => client.destroy());
+                return undefined;
+            });
+            return undefined;
+        });
+    });
+    await new Promise(r => server.listen(0, "127.0.0.1", r));
+    return { port: /** @type {net.AddressInfo} */ (server.address()).port, seen, close: () => server.close() };
+};
+
+test("createDispatcher picks the agent by scheme", () => {
+    assert.equal(createDispatcher(""), undefined);
+    assert.equal(createDispatcher("http://proxy.example:3128")?.constructor.name, "ProxyAgent");
+    assert.equal(createDispatcher("socks5://127.0.0.1:40000")?.constructor.name, "Agent");
+    assert.throws(() => createDispatcher("ftp://nope"), /proxy/i);
+});
+
+test("a socks5 proxy url tunnels the request through the proxy", async() => {
+    const target = http.createServer((req, res) => {
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ data: { path: req.url } }));
+    });
+    await new Promise(r => target.listen(0, "127.0.0.1", r));
+    const targetPort = /** @type {net.AddressInfo} */ (target.address()).port;
+    const socks = await startSocks5();
+
+    const dispatcher = createDispatcher(`socks5://127.0.0.1:${socks.port}`);
+    const res = await fetch(`http://127.0.0.1:${targetPort}/players/x`, { dispatcher });
+    const body = await res.json();
+
+    assert.equal(res.status, 200);
+    assert.deepEqual(body, { data: { path: "/players/x" } });
+    assert.deepEqual(socks.seen, [`127.0.0.1:${targetPort}`]);
+
+    await dispatcher.close();
+    socks.close();
+    target.close();
 });
 

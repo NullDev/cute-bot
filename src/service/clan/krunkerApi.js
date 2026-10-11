@@ -1,4 +1,6 @@
-import { ProxyAgent } from "undici";
+import tls from "node:tls";
+import { Agent, ProxyAgent } from "undici";
+import { SocksClient } from "socks";
 import { config } from "../../../config/config.js";
 
 // ========================= //
@@ -9,6 +11,52 @@ export const BASE_URL = "https://gapi.svc.krunker.io";
 export const TURF_EPOCH_UTC = Date.UTC(2026, 2, 17);
 
 const RETRY_STATUSES = new Set([408, 500, 502, 503, 504, 522, 524]);
+
+/**
+ * undici Agent whose connections are opened through a SOCKS4/5 proxy
+ *
+ * @param {URL} proxy
+ * @return {Agent}
+ */
+const socksAgent = function(proxy){
+    const options = {
+        host: proxy.hostname,
+        port: Number(proxy.port) || 1080,
+        type: /** @type {4 | 5} */ (proxy.protocol.startsWith("socks4") ? 4 : 5),
+        userId: proxy.username ? decodeURIComponent(proxy.username) : undefined,
+        password: proxy.password ? decodeURIComponent(proxy.password) : undefined,
+    };
+    return new Agent({
+        connect(opts, callback){
+            const destination = { host: String(opts.hostname), port: Number(opts.port) || (opts.protocol === "https:" ? 443 : 80) };
+            SocksClient.createConnection({ proxy: options, command: "connect", destination })
+                .then(({ socket }) => {
+                    if (opts.protocol !== "https:"){
+                        callback(null, socket);
+                        return;
+                    }
+                    const secure = tls.connect({ socket, servername: String(opts.servername || opts.hostname), ALPNProtocols: ["http/1.1"] });
+                    secure.once("secureConnect", () => callback(null, secure));
+                    secure.once("error", err => callback(err, null));
+                })
+                .catch(err => callback(err, null));
+        },
+    });
+};
+
+/**
+ * Dispatcher for an optional proxy URL: http(s) proxies use a CONNECT tunnel, socks4/socks5 a SOCKS tunnel
+ *
+ * @param {string} proxyUrl empty for a direct connection
+ * @return {import("undici").Dispatcher | undefined}
+ */
+export const createDispatcher = function(proxyUrl){
+    if (!proxyUrl) return undefined;
+    const proxy = new URL(proxyUrl);
+    if (proxy.protocol === "http:" || proxy.protocol === "https:") return new ProxyAgent(proxyUrl);
+    if (/^socks(4a?|5h?):$/.test(proxy.protocol)) return socksAgent(proxy);
+    throw new Error(`Unsupported proxy scheme "${proxy.protocol}" in clan.api_proxy (use http, https, socks4 or socks5)`);
+};
 const MAX_ATTEMPTS = 4;
 const BACKOFF_MS = 300;
 const RATE_LIMIT_PAUSE_MS = 5000;
@@ -59,14 +107,14 @@ export class KrunkerApiError extends Error {
 export class KrunkerApi {
     /**
      * @param {{ fetchFn?: typeof fetch, sleep?: (ms: number) => Promise<void>, spacingMs?: number, proxyUrl?: string }} [options]
-     *   proxyUrl: optional http(s) proxy for every request, for hosts whose own IP is blocked by Krunker's edge
+     *   proxyUrl: optional http(s) or socks proxy for every request, for hosts whose own IP is blocked by Krunker's edge
      */
     constructor({ fetchFn = globalThis.fetch, sleep = ms => new Promise(r => setTimeout(r, ms)), spacingMs = 200, proxyUrl = "" } = {}){
         this.fetchFn = fetchFn;
         this.sleep = sleep;
         this.spacingMs = spacingMs;
         this.lastCall = 0;
-        this.dispatcher = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
+        this.dispatcher = createDispatcher(proxyUrl);
     }
 
     #queue = Promise.resolve();
