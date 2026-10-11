@@ -1,6 +1,7 @@
 import path from "node:path";
 import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, MessageFlags, AttachmentBuilder } from "discord.js";
 import { QuickDB } from "quick.db";
+import Log from "../../util/log.js";
 import { api } from "../../service/clan/krunkerApi.js";
 import { getClanDb } from "../../service/clan/db.js";
 import { resolveIgn, linkPlayer, unlinkDiscord, getLinkByDiscord, migrateQuickDb } from "../../service/clan/identity.js";
@@ -46,7 +47,8 @@ export default {
             try {
                 resolved = await resolveIgn(api, ign);
             }
-            catch {
+            catch (e){
+                Log.error("[CLAN] clan-link set: Krunker API error: ", e instanceof Error ? e : new Error(String(e)));
                 return await interaction.editReply("The Krunker API is unavailable right now, please try again later.");
             }
             if (!resolved) return await interaction.editReply(`No Krunker player named \`${ign}\`.`);
@@ -78,6 +80,7 @@ export default {
             result = await migrateQuickDb(db, api, guildId, entries);
         }
         catch (e){
+            Log.error("[CLAN] clan-link migrate: Krunker API error: ", e instanceof Error ? e : new Error(String(e)));
             const linkedSoFar = /** @type {any} */ (e)?.partial?.linked?.length ?? 0;
             return await interaction.editReply(`The Krunker API became unavailable during the migration; ${linkedSoFar} entries were linked so far, run the command again later.`);
         }

@@ -82,7 +82,8 @@ const handleVerification = async function(interaction){
     try {
         resolved = await resolveIgn(api, username);
     }
-    catch {
+    catch (e){
+        Log.error("[CLAN] verify: Krunker API error: ", e instanceof Error ? e : new Error(String(e)));
         return await sendErrorMessage(interaction, "The Krunker API is unavailable right now, please try again later.");
     }
     if (!resolved){

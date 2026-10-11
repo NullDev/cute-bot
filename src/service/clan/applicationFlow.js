@@ -148,7 +148,8 @@ export const handleApplicationSubmit = async function(interaction){
     try {
         profile = await api.getPlayer(answers.ign);
     }
-    catch {
+    catch (e){
+        Log.error("[CLAN] application submit: Krunker API error: ", e instanceof Error ? e : new Error(String(e)));
         await whisper(interaction, "The Krunker API is unavailable right now, please try again later.");
         return;
     }
