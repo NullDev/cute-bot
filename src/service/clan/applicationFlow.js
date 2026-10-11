@@ -63,8 +63,8 @@ export const decisionComponents = function(id, disabled, url){
         new ButtonBuilder().setCustomId(ACCEPT_PREFIX + id).setLabel("Accept").setStyle(ButtonStyle.Success).setDisabled(disabled),
         new ButtonBuilder().setCustomId(REJECT_PREFIX + id).setLabel("Reject").setStyle(ButtonStyle.Danger).setDisabled(disabled),
     );
-    row.addComponents(new ButtonBuilder().setCustomId(EVALUATE_PREFIX + id).setLabel("Evaluation").setStyle(ButtonStyle.Secondary));
-    row.addComponents(new ButtonBuilder().setCustomId(INTERVIEW_PREFIX + id).setLabel("Interview").setStyle(ButtonStyle.Secondary));
+    row.addComponents(new ButtonBuilder().setCustomId(EVALUATE_PREFIX + id).setLabel("Show Evaluation").setStyle(ButtonStyle.Secondary));
+    row.addComponents(new ButtonBuilder().setCustomId(INTERVIEW_PREFIX + id).setLabel("Start Interview").setStyle(ButtonStyle.Secondary));
     if (url) row.addComponents(new ButtonBuilder().setLabel("Profile").setStyle(ButtonStyle.Link).setURL(url));
     return row;
 };
