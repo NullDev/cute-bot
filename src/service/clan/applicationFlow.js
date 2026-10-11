@@ -20,6 +20,7 @@ export const APPLY_MODAL = "application_submit";
 export const ACCEPT_PREFIX = "application_accept:";
 export const REJECT_PREFIX = "application_reject:";
 export const REJECT_MODAL_PREFIX = "application_reject_modal:";
+export const VOTE_REACTIONS = ["👍", "👎"];
 
 const FIELDS = [
     { id: "ign", label: "Your Krunker IGN", style: TextInputStyle.Short, required: true, max: 32 },
@@ -252,6 +253,8 @@ export const handleApplicationSubmit = async function(interaction){
     try {
         const turf = await api.getTurfPlayer(profile.player_id).catch(() => null);
         const message = await channel.send({ embeds: [buildApplicationEmbed(app, profile, null, turf)], components: [decisionComponents(id, false, profileUrl(app.playerName))] });
+        // informal vote only, nothing reads these
+        for (const emoji of VOTE_REACTIONS) await message.react(emoji).catch(() => null);
         setApplicationMessage(db, id, channel.id, message.id);
     }
     catch (error){
