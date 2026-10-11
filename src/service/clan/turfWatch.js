@@ -15,6 +15,7 @@ export const DEFAULT_TURF = Object.freeze({
     report_hours_utc: [12, 18, 21, 23],
     hold_position: 2,
     close_margin: 100,
+    max_pings_per_day: 2,
 });
 
 /**
@@ -179,12 +180,17 @@ export const headline = function(maps, cfg){
 export const actionNeeded = maps => maps.some(m => m.state !== "safe");
 
 /**
- * Role mention prefix when action is needed, empty otherwise
+ * Role mention prefix when action is needed and the daily ping budget allows it, empty otherwise
  *
  * @param {boolean} needed
+ * @param {{ pingsToday: number, cfg: { max_pings_per_day: number } }} [budget]
  * @return {string}
  */
-const ping = needed => (needed && config.ids.clan.turf_role ? `<@&${config.ids.clan.turf_role}> ` : "");
+export const ping = function(needed, budget = { pingsToday: 0, cfg: DEFAULT_TURF }){
+    if (!needed || !config.ids.clan.turf_role) return "";
+    if (budget.pingsToday >= budget.cfg.max_pings_per_day) return "";
+    return `<@&${config.ids.clan.turf_role}> `;
+};
 
 /**
  * The full status message
@@ -192,14 +198,16 @@ const ping = needed => (needed && config.ids.clan.turf_role ? `<@&${config.ids.c
  * @param {MapAssessment[]} maps
  * @param {{ hold_position: number }} cfg
  * @param {Date} [now=new Date()]
- * @return {{ content: string, embed: EmbedBuilder, needed: boolean }}
+ * @param {number} [pingsToday=0] role pings already sent today, for the daily cap
+ * @return {{ content: string, embed: EmbedBuilder, needed: boolean, pinged: boolean }}
  */
-export const composeTurfReport = function(maps, cfg, now = new Date()){
+export const composeTurfReport = function(maps, cfg, now = new Date(), pingsToday = 0){
     const needed = actionNeeded(maps);
+    const prefix = ping(needed, { pingsToday, cfg });
     const embed = new EmbedBuilder()
         .setColor(needed ? "Orange" : defaults.embed_color)
         .setDescription(maps.map(m => mapLine(m, cfg)).join("\n") + `\n\n⏳ ${timeLeftText(now)} until the turf day ends`);
-    return { content: ping(needed) + headline(maps, cfg), embed, needed };
+    return { content: prefix + headline(maps, cfg), embed, needed, pinged: !!prefix };
 };
 
 /**
@@ -293,21 +301,31 @@ export const runTurfWatch = async function(client, { db = getClanDb(), krunker =
 
     let count = 0;
     const roles = config.ids.clan.turf_role ? [config.ids.clan.turf_role] : [];
+    const logKey = db.prepare("insert or ignore into turf_watch_log (day, key, posted_at) values (?, ?, ?)");
+    let pingsToday = db.prepare("select count(*) as c from turf_watch_log where day = ? and key like 'ping:%'").get(day)?.c ?? 0;
     if (decision.report || force){
-        const { content, embed } = composeTurfReport(maps, cfg, now);
+        const { content, embed, pinged } = composeTurfReport(maps, cfg, now, pingsToday);
         await channel.send({ content, embeds: [embed], allowedMentions: { roles, users: [] } });
+        if (pinged){
+            pingsToday++;
+            logKey.run(day, `ping:report:${now.getTime()}`, now.getTime());
+        }
         count++;
     }
     for (const alert of decision.alerts){
-        // "we are back" news needs nobody; warnings and losses do
+        // "we are back" news needs nobody; warnings and losses do, within the daily ping budget
         const needed = !alert.text.startsWith("✅");
-        await channel.send({ content: ping(needed) + alert.text, allowedMentions: { roles, users: [] } });
+        const prefix = ping(needed, { pingsToday, cfg });
+        await channel.send({ content: prefix + alert.text, allowedMentions: { roles, users: [] } });
+        if (prefix){
+            pingsToday++;
+            logKey.run(day, `ping:${alert.key}`, now.getTime());
+        }
         count++;
     }
 
     const upsertState = db.prepare("insert into turf_watch_state (day, map_id, state, updated_at) values (?, ?, ?, ?) on conflict (day, map_id) do update set state = excluded.state, updated_at = excluded.updated_at");
     for (const a of maps) upsertState.run(day, a.mapId, a.state, now.getTime());
-    const logKey = db.prepare("insert or ignore into turf_watch_log (day, key, posted_at) values (?, ?, ?)");
     for (const key of decision.keys) logKey.run(day, key, now.getTime());
 
     if (count) Log.done(`[TURF] posted ${count} message(s)`);

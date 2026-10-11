@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-    DEFAULT_TURF, mergeStandings, assessTurf, headline, mapLine, alertText, decideTurfPosts, composeTurfReport, timeLeftText, actionNeeded,
+    DEFAULT_TURF, mergeStandings, assessTurf, headline, mapLine, alertText, decideTurfPosts, composeTurfReport, timeLeftText, actionNeeded, ping,
 } from "../src/service/clan/turfWatch.js";
+import { config } from "../config/config.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -132,3 +133,22 @@ test("the report carries the map lines and the time left", () => {
     assert.ok(desc.includes("**Burg**: #2 with 1,101 kills, 272 ahead of SIBU"), desc);
     assert.ok(desc.includes("⏳ 2h 10m until the turf day ends"), desc);
 });
+
+test("role pings stop after the daily budget", () => {
+    const saved = config.ids.clan.turf_role;
+    config.ids.clan.turf_role = "role1";
+    try {
+        const cfg = { ...DEFAULT_TURF, max_pings_per_day: 2 };
+        assert.equal(ping(false, { pingsToday: 0, cfg }), "", "nothing needed, no ping");
+        assert.equal(ping(true, { pingsToday: 0, cfg }), "<@&role1> ");
+        assert.equal(ping(true, { pingsToday: 1, cfg }), "<@&role1> ");
+        assert.equal(ping(true, { pingsToday: 2, cfg }), "", "budget spent");
+        const tight = assessTurf(standings(), { hold_position: 2, close_margin: 400 });
+        assert.equal(composeTurfReport(tight, cfg, new Date(), 2).pinged, false);
+        assert.equal(composeTurfReport(tight, cfg, new Date(), 0).pinged, true);
+    }
+    finally {
+        config.ids.clan.turf_role = saved;
+    }
+});
+

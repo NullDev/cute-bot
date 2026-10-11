@@ -38,6 +38,7 @@ export default {
             report_hours_utc: [12, 18, 21, 23],
             hold_position: 2,
             close_margin: 100,
+            max_pings_per_day: 2,
         },
         review: {
             weights: { level: 1.0, nukes: 1.5, kdr: 1.0, kpg: 0.5, rank: 0.5, s7: 1.5, turf: 1.0, delta: 1.0 },
