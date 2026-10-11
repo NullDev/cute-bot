@@ -47,9 +47,11 @@ test("application embed copes with no profile and no turf data", () => {
 
 test("decision row carries a profile link button next to Accept and Reject", () => {
     const row = decisionComponents(7, false, profileUrl("NulPing")).toJSON();
-    assert.deepEqual(row.components.map(c => c.label), ["Accept", "Reject", "Profile"]);
-    assert.equal(row.components[2].url, profileUrl("NulPing"));
-    assert.equal(row.components[2].disabled, undefined);
+    assert.deepEqual(row.components.map(c => c.label), ["Accept", "Reject", "Evaluation", "Profile"]);
+    assert.equal(row.components[2].custom_id, "application_eval:7");
+    assert.equal(row.components[3].url, profileUrl("NulPing"));
+    assert.equal(row.components[3].disabled, undefined);
     const done = decisionComponents(7, true, profileUrl("NulPing")).toJSON();
     assert.deepEqual(done.components.slice(0, 2).map(c => c.disabled), [true, true]);
+    assert.equal(done.components[2].disabled, undefined, "evaluation stays available after a decision");
 });

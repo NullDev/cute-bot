@@ -6,6 +6,8 @@ import defaults from "../../util/defaults.js";
 import { config } from "../../../config/config.js";
 import { api } from "./krunkerApi.js";
 import { profileUrl, statsText, turfText } from "./statsCard.js";
+import { evaluatePlayer } from "./evaluatePlayer.js";
+import { buildEvaluationEmbed } from "./evaluate.js";
 
 export { profileUrl };
 import { getClanDb } from "./db.js";
@@ -23,6 +25,7 @@ export const APPLY_MODAL = "application_submit";
 export const ACCEPT_PREFIX = "application_accept:";
 export const REJECT_PREFIX = "application_reject:";
 export const REJECT_MODAL_PREFIX = "application_reject_modal:";
+export const EVALUATE_PREFIX = "application_eval:";
 export const VOTE_REACTIONS = ["👍", "👎"];
 
 const FIELDS = [
@@ -57,6 +60,7 @@ export const decisionComponents = function(id, disabled, url){
         new ButtonBuilder().setCustomId(ACCEPT_PREFIX + id).setLabel("Accept").setStyle(ButtonStyle.Success).setDisabled(disabled),
         new ButtonBuilder().setCustomId(REJECT_PREFIX + id).setLabel("Reject").setStyle(ButtonStyle.Danger).setDisabled(disabled),
     );
+    row.addComponents(new ButtonBuilder().setCustomId(EVALUATE_PREFIX + id).setLabel("Evaluation").setStyle(ButtonStyle.Secondary));
     if (url) row.addComponents(new ButtonBuilder().setLabel("Profile").setStyle(ButtonStyle.Link).setURL(url));
     return row;
 };
@@ -316,6 +320,41 @@ export const handleApplicationDecision = async function(interaction){
         return;
     }
     await whisper(interaction, `Accepted #${id}.`);
+};
+
+/**
+ * Evaluation button: a would-be verdict for the applicant, visible only to the clicker, open to everyone
+ *
+ * @param {import("discord.js").ButtonInteraction} interaction
+ */
+export const handleApplicationEvaluate = async function(interaction){
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    const id = Number(interaction.customId.slice(EVALUATE_PREFIX.length));
+    const app = getApplication(getClanDb(), id);
+    if (!app){
+        await whisper(interaction, "Unknown application.");
+        return;
+    }
+    let profile;
+    try {
+        profile = await api.getPlayer(app.playerName);
+    }
+    catch {
+        await whisper(interaction, "The Krunker API is unavailable right now, please try again later.");
+        return;
+    }
+    if (!profile?.player_id){
+        await whisper(interaction, `No Krunker player named \`${app.playerName}\` any more.`);
+        return;
+    }
+    try {
+        const evaluation = await evaluatePlayer({ db: getClanDb(), api, guildId: interaction.guildId ?? "", profile });
+        await interaction.editReply({ embeds: [buildEvaluationEmbed({ ...evaluation, profile })] });
+    }
+    catch (e){
+        Log.warn(`[CLAN] evaluation of application #${id} failed: ${e instanceof Error ? e.message : String(e)}`);
+        await whisper(interaction, `Could not evaluate: ${e instanceof Error ? e.message : String(e)}`);
+    }
 };
 
 /**

@@ -6,8 +6,8 @@ import handleGiveawayJoin from "../service/handleGiveawayJoin.js";
 import handleGiveawayParticipants from "../service/handleGiveawayParticipants.js";
 import Log from "../util/log.js";
 import {
-    APPLY_BUTTON, APPLY_MODAL, ACCEPT_PREFIX, REJECT_PREFIX, REJECT_MODAL_PREFIX,
-    sendApplicationModal, handleApplicationSubmit, handleApplicationDecision, handleRejectModal,
+    APPLY_BUTTON, APPLY_MODAL, ACCEPT_PREFIX, REJECT_PREFIX, REJECT_MODAL_PREFIX, EVALUATE_PREFIX,
+    sendApplicationModal, handleApplicationSubmit, handleApplicationDecision, handleRejectModal, handleApplicationEvaluate,
 } from "../service/clan/applicationFlow.js";
 
 // ========================= //
@@ -70,6 +70,7 @@ const handleButtonInteraction = async function(interaction){
     if (interaction.customId === "verify") await sendVerifyModal(interaction);
     if (interaction.customId === APPLY_BUTTON) await sendApplicationModal(interaction);
     if (interaction.customId.startsWith(ACCEPT_PREFIX) || interaction.customId.startsWith(REJECT_PREFIX)) await handleApplicationDecision(interaction);
+    if (interaction.customId.startsWith(EVALUATE_PREFIX)) await handleApplicationEvaluate(interaction);
     if (interaction.customId === "giveaway_join") await handleGiveawayJoin(interaction);
     if (interaction.customId.startsWith("giveaway_participants")) await handleGiveawayParticipants(interaction);
 };
