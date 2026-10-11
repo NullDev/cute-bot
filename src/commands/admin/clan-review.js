@@ -7,6 +7,7 @@ import { reviewClan } from "../../service/clan/review.js";
 import { reviewConfig } from "../../service/clan/evaluatePlayer.js";
 import { clanForGuild, clanTargetSize } from "../../service/clan/clans.js";
 import { buildReviewRows, formatReviewTable, buildReviewEmbed } from "../../service/clan/reviewReport.js";
+import { snapshotMissingMembers } from "../../service/clan/snapshot.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -55,6 +56,7 @@ export default {
             return await interaction.editReply(`Could not fetch the roster: ${e instanceof Error ? e.message : String(e)}`);
         }
 
+        await snapshotMissingMembers(db, api, roster, { day: turfDay() }).catch(() => null);
         const rows = buildReviewRows(db, roster, listLinks(db, guildId), turfDay());
         const cfg = reviewConfig(guildId);
         const result = reviewClan(rows, cfg);

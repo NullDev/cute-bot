@@ -27,6 +27,7 @@ export const DEFAULT_REVIEW = Object.freeze({
  * @property {number | null} score14Delta
  * @property {number} rankedRank
  * @property {number | null} [memberDays] days since first seen on the roster, null when unknown or not a member
+ * @property {boolean} [hasSnapshot] false when a member has no snapshot row yet; paper stats are then unknown
  */
 
 /**
@@ -117,7 +118,11 @@ export const scoreMember = function(row, refs, cfg){
     let verdict;
     /** @type {string[]} */
     let reasons;
-    if (grace){
+    if (row.hasSnapshot === false){
+        verdict = "watch";
+        reasons = ["no snapshot yet: joined after the last nightly run, or the profile lookup failed"];
+    }
+    else if (grace){
         verdict = "keep";
         reasons = [`joined ${memberDays} days ago, grace period of ${cfg.grace_days} days`];
     }
@@ -207,7 +212,7 @@ const relationByDiff = function(value, ref, tolerance = 0.25){
 export const explainMember = function(row, result, refs, cfg){
     const lines = [];
     const lvl = Math.min(row.level, 150);
-    if (row.s7 !== null && row.level === 0) lines.push("No daily snapshot for this member yet, so the paper stats below are unknown until the next nightly run.");
+    if (row.hasSnapshot === false) lines.push("No daily snapshot for this member yet, so the paper stats below are unknown until the next nightly run.");
 
     // activity
     if (result.inactive){

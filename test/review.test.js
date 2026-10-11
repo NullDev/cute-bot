@@ -176,8 +176,14 @@ test("score medians ignore members without a snapshot and the comparison copes w
     assert.ok(text.includes("Both paper stats and recent activity are at or above the clan median."), text);
     assert.ok(!text.includes("looks weaker"), text);
 
-    const unsnapshotted = { ...base, level: 0, kdr: 0, kpg: 0 };
+    const unsnapshotted = { ...base, level: 0, kdr: 0, kpg: 0, hasSnapshot: false };
     const text2 = explainMember(unsnapshotted, scoreMember(unsnapshotted, fullRefs, DEFAULT_REVIEW), fullRefs, DEFAULT_REVIEW).join("\n");
     assert.ok(text2.includes("No daily snapshot for this member yet"), text2);
+});
+
+test("a member without a snapshot is a watch with a plain reason, never scored on zeros", () => {
+    const r = scoreMember({ ...base, level: 0, kdr: 0, kpg: 0, hasSnapshot: false }, refs, DEFAULT_REVIEW);
+    assert.equal(r.verdict, "watch");
+    assert.match(r.reasons[0], /no snapshot yet/);
 });
 

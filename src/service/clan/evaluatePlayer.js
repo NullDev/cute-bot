@@ -5,6 +5,7 @@ import { isMainGuild } from "./clans.js";
 import { fetchRoster } from "./roster.js";
 import { computeRefs, computeScoreMedians, scoreMember, DEFAULT_REVIEW } from "./review.js";
 import { buildReviewRows } from "./reviewReport.js";
+import { snapshotMissingMembers } from "./snapshot.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -86,6 +87,7 @@ export const reviewConfig = function(guildId){
 export const evaluatePlayer = async function({ db, api, guildId, clan, profile }){
     const roster = await fetchRoster(db, api, { clanName: clan.name });
     const day = turfDay();
+    await snapshotMissingMembers(db, api, roster, { day }).catch(() => null);
     const rows = buildReviewRows(db, roster, listLinks(db, guildId), day);
     const cfg = reviewConfig(guildId);
     const baseRefs = computeRefs(rows);

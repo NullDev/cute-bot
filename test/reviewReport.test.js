@@ -45,6 +45,10 @@ test("buildReviewRows joins snapshot, turf sum and 14 day delta", () => {
     const p3 = rows.find(r => r.playerId === 3);
     assert.equal(p3.level, 0);
     assert.equal(p3.kdr, 0);
+    assert.equal(p3.hasSnapshot, false);
+    assert.equal(p1.hasSnapshot, true);
+    const table = formatReviewTable([{ ...p3, review: { verdict: "watch", total: 0, reasons: ["no snapshot yet"] } }]);
+    assert.match(table.split("\n")[1], /^NoSnap\s+recruit\s+-\s+-\s+-\s+-\s+-/);
 });
 
 test("buildReviewRows derives days since first seen on the roster, unknown for members present from day one", () => {

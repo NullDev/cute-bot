@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createClanDb } from "../src/service/clan/db.js";
-import { buildSnapshotRow, upsertSnapshot, runSnapshot, backfillTurf, hasSnapshotForDay, latestSnapshotDay } from "../src/service/clan/snapshot.js";
+import { buildSnapshotRow, upsertSnapshot, runSnapshot, backfillTurf, hasSnapshotForDay, latestSnapshotDay, snapshotMissingMembers } from "../src/service/clan/snapshot.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -62,3 +62,19 @@ test("backfillTurf writes one row per player and day", async() => {
     assert.equal(n, 3);
     assert.equal(db.prepare("select kills from turf_days where player_id = 1 and day = 206").get().kills, 206);
 });
+
+test("snapshotMissingMembers only fetches members without any snapshot", async() => {
+    const db = createClanDb(":memory:");
+    upsertSnapshot(db, buildSnapshotRow(PROFILE, { rank: 0, s7: 1 }, 200, 1));
+    const calls = [];
+    const api = { getPlayer: async name => { calls.push(name); return { ...PROFILE, player_id: 555, player_name: name }; } };
+    const roster = { members: [
+        { playerId: 7610743, playerName: "NulPing", rank: 0, s7: 1 },
+        { playerId: 555, playerName: "Newbie", rank: 0, s7: 5 },
+    ] };
+    const res = await snapshotMissingMembers(db, api, roster, { day: 207, now: 9 });
+    assert.deepEqual(res, { added: 1, failed: [] });
+    assert.deepEqual(calls, ["Newbie"]);
+    assert.equal(db.prepare("select in_clan from snapshots where player_id = 555 and day = 207").get().in_clan, 1);
+});
+

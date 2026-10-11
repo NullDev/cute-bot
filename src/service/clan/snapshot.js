@@ -162,3 +162,33 @@ export const earliestSnapshotDay = function(db){
     return db.prepare("select min(day) as d from snapshots").get()?.d ?? null;
 };
 
+/**
+ * Snapshot roster members that have no snapshot row at all (joined after the last nightly run), so reviews never score fake zeros
+ *
+ * @param {import("better-sqlite3").Database} db
+ * @param {import("./krunkerApi.js").KrunkerApi} api
+ * @param {{ members: Array<{ playerId: number, playerName: string, rank: number, s7: number }> }} roster
+ * @param {{ day: number, now?: number }} options
+ * @return {Promise<{ added: number, failed: string[] }>}
+ */
+export const snapshotMissingMembers = async function(db, api, roster, { day, now = Date.now() }){
+    const exists = db.prepare("select 1 from snapshots where player_id = ? limit 1");
+    let added = 0;
+    const failed = [];
+    for (const m of roster.members){
+        if (exists.get(m.playerId)) continue;
+        try {
+            const profile = await api.getPlayer(m.playerName);
+            if (!profile?.player_id) throw new Error("not found");
+            upsertSnapshot(db, buildSnapshotRow(profile, { rank: m.rank, s7: m.s7 }, day, now));
+            rememberName(db, profile.player_id, profile.player_name, now);
+            added++;
+        }
+        catch (e){
+            failed.push(m.playerName);
+            Log.warn(`[CLAN] Snapshot of new member ${m.playerName} failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+    return { added, failed };
+};
+
