@@ -13,6 +13,7 @@ Discord bot for the Cute Krunker Clan.
 - Syncs the clan roles with the in-game roster every day at 03:30 UTC (`/clan-sync` for a manual or dry run).
 - Snapshots every member daily and rates them with `/clan-review`.
 - Takes clan applications through a button + modal, reviewed in a channel with Accept / Reject.
+- Can serve other clans' Discord servers with the review and evaluate commands only (`clan.clans`); commands are registered per server, nothing is global.
 
 #### Rollout
 
@@ -71,7 +72,9 @@ Once the config has been copied like described in [Step 4](#wrench-setup), it ca
 | ids: clan: <br> `recruit`, `soldier`, `captain` | Clan rank roles, applied cumulatively from the in-game rank | string | N/A |
 | ids: clan: <br> `applications_role` | Role that may accept or reject applications | string | N/A |
 | ids: clan: <br> `applications_channel` | Channel where applications are posted and decided | string | N/A |
-| clan: <br> `id`, `name` | Krunker clan id and tag | number, string | 561461, "cute" |
+| clan: <br> `main_server` | Guild id of the server where everything runs (verify, applications, role sync, AI) | string | N/A |
+| clan: <br> `clans` | One entry per clan: `{ discord, id, name, target_size? }` with the clan's Discord server id, Krunker clan id and tag. Servers other than `main_server` only get `/clan-review`, `/clan-evaluate`, `/help` and `/info`; everything else answers "This command is not available here." | object-array | [] |
+| clan: review: <br> `grace_days` | Members first seen on the roster fewer than this many days ago are kept regardless of stats | number | 7 |
 | clan: <br> `sync_enabled` | Enable the automatic daily role sync; keep false until the migration and a dry run are done | boolean | false |
 | clan: <br> `api_proxy` | Optional proxy URL for all Krunker API calls, for hosts whose IP Krunker's edge blocks (Cloudflare 403): `http://`, `https://`, `socks4://` or `socks5://`, for example Cloudflare WARP in proxy mode as `socks5://127.0.0.1:40000`. Empty = direct | string | "" |
 | clan: <br> `target_size` | Member count the review aims for | number | 100 |

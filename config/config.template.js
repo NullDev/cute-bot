@@ -18,8 +18,12 @@ export default {
         },
     },
     clan: {
-        id: 561461,
-        name: "cute",
+        // guild id of the server where everything runs (verify, applications, sync); other servers in `clans` only get the review commands
+        main_server: "",
+        // one entry per clan: its Discord server, Krunker clan id and tag; optional target_size per clan
+        clans: [
+            // { discord: "", id: 0, name: "", target_size: 100 },
+        ],
         sync_enabled: false,
         api_proxy: "",
         target_size: 100,
@@ -32,6 +36,7 @@ export default {
             roleBonus: { 0: 0, 1: 0.3, 2: 0.6, 3: 0.6 },
             protect: { nukes: 50, level: 100, rank: 2 },
             thresholds: { kick: 1.0, watch: 2.0 },
+            grace_days: 7,
         },
     },
     ai_included_channels: [
