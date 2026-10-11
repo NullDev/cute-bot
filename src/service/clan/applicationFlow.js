@@ -4,7 +4,7 @@ import {
 import Log from "../../util/log.js";
 import defaults from "../../util/defaults.js";
 import { config } from "../../../config/config.js";
-import { api, levelFromScore } from "./krunkerApi.js";
+import { api, levelFromScore, TURF_EPOCH_UTC } from "./krunkerApi.js";
 import { getClanDb } from "./db.js";
 import { getLinkByDiscord, suggestIgns } from "./identity.js";
 import { fetchRoster, rosterByPlayerId } from "./roster.js";
@@ -45,13 +45,76 @@ const whisper = async function(interaction, content){
  *
  * @param {number} id
  * @param {boolean} disabled
+ * @param {string} [url] profile page, added as a link button when given
  * @return {ActionRowBuilder<ButtonBuilder>}
  */
-export const decisionComponents = function(id, disabled){
-    return /** @type {ActionRowBuilder<ButtonBuilder>} */ (new ActionRowBuilder()).addComponents(
+export const decisionComponents = function(id, disabled, url){
+    const row = /** @type {ActionRowBuilder<ButtonBuilder>} */ (new ActionRowBuilder()).addComponents(
         new ButtonBuilder().setCustomId(ACCEPT_PREFIX + id).setLabel("Accept").setStyle(ButtonStyle.Success).setDisabled(disabled),
         new ButtonBuilder().setCustomId(REJECT_PREFIX + id).setLabel("Reject").setStyle(ButtonStyle.Danger).setDisabled(disabled),
     );
+    if (url) row.addComponents(new ButtonBuilder().setLabel("Profile").setStyle(ButtonStyle.Link).setURL(url));
+    return row;
+};
+
+/**
+ * Public profile page of a player
+ *
+ * @param {string} playerName
+ * @return {string}
+ */
+export const profileUrl = function(playerName){
+    return `https://krunker.io/social.html?p=profile&q=${encodeURIComponent(playerName)}`;
+};
+
+/**
+ * @param {number} n
+ * @return {string}
+ */
+const num = n => Math.round(Number(n) || 0).toLocaleString("en-US");
+
+/**
+ * @param {number} part
+ * @param {number} whole
+ * @return {string}
+ */
+const pct = (part, whole) => `${Math.round(100 * (Number(part) || 0) / Math.max(Number(whole) || 0, 1))}%`;
+
+/**
+ * Stats lines for the application card
+ *
+ * @param {any} profile
+ * @return {string}
+ */
+const statsText = function(profile){
+    if (!profile) return "stats unavailable";
+    const st = profile.player_stats ?? {};
+    const kills = Number(profile.player_kills) || 0;
+    const deaths = Number(profile.player_deaths) || 0;
+    const games = Number(profile.player_games_played) || 0;
+    const wins = Number(profile.player_wins) || 0;
+    const inOtherClan = profile.player_clan && profile.player_clan !== config.clan.name;
+    return [
+        `Level **${levelFromScore(profile.player_score)}** · KDR **${(kills / Math.max(deaths, 1)).toFixed(2)}** · KPG **${(kills / Math.max(games, 1)).toFixed(1)}** · W/L **${(wins / Math.max(games - wins, 1)).toFixed(2)}**`,
+        `Kills **${num(kills)}** · Deaths **${num(deaths)}** · Wins **${num(wins)}** · Games **${num(games)}** · Hours **${num((Number(profile.player_timeplayed) || 0) / 3600000)}**`,
+        `Nukes **${num(st.n)}** · Headshots **${pct(st.hs, kills)}** · Accuracy **${pct(st.h, st.s)}** · Ranked **${Number(profile.ranked_rank) || 0 ? profile.ranked_rank : "unranked"}**`,
+        `Since **${String(profile.player_datenew ?? "").slice(0, 10) || "?"}** · ${profile.online ? "🟢 online" : "⚫ offline"} · Clan **${profile.player_clan ? `[${profile.player_clan}]` : "none"}**${inOtherClan ? " ⚠️ already in a clan" : ""}`,
+    ].join("\n");
+};
+
+/**
+ * Turf season line for the application card
+ *
+ * @param {any} turf result of getTurfPlayer, or null
+ * @return {string}
+ */
+const turfText = function(turf){
+    if (!turf || !(Number(turf.total_games) > 0)) return "no turf games this season";
+    const kills = Number(turf.total_kills) || 0;
+    const deaths = Number(turf.total_deaths) || 0;
+    const lastDay = Number(turf.last_day);
+    const lastPlayed = Number.isFinite(lastDay) ? new Date(TURF_EPOCH_UTC + lastDay * 86400000).toISOString().slice(0, 10) : "?";
+    return `Kills **${num(kills)}** · Deaths **${num(deaths)}** · K/D **${(kills / Math.max(deaths, 1)).toFixed(2)}** · Games **${num(turf.total_games)}** · KR **${num(turf.total_kr)}** · Last played **${lastPlayed}**`;
 };
 
 /**
@@ -60,25 +123,23 @@ export const decisionComponents = function(id, disabled){
  * @param {import("./applications.js").Application} app
  * @param {any} profile player profile or null
  * @param {{ status: string, reviewerId: string, reason: string | null, decidedAt: number, rolesOk?: boolean, dmOk?: boolean, rolesError?: string | null } | null} decision
+ * @param {any} [turf=null] result of getTurfPlayer for the applicant, or null
  * @return {EmbedBuilder}
  */
-export const buildApplicationEmbed = function(app, profile, decision){
+export const buildApplicationEmbed = function(app, profile, decision, turf = null){
     const a = app.answers;
-    const stats = profile ? [
-        `Level **${levelFromScore(profile.player_score)}** · KDR **${(profile.player_kills / Math.max(profile.player_deaths, 1)).toFixed(2)}** · KPG **${(profile.player_kills / Math.max(profile.player_games_played, 1)).toFixed(1)}**`,
-        `Nukes **${profile.player_stats?.n ?? 0}** · Games **${profile.player_games_played}** · Since **${String(profile.player_datenew ?? "").slice(0, 10)}**`,
-        `Clan **${profile.player_clan ? `[${profile.player_clan}]` : "none"}**${profile.player_clan && profile.player_clan !== config.clan.name ? " ⚠️ already in a clan" : ""}`,
-    ].join("\n") : "stats unavailable";
 
     let color = defaults.embed_color;
     if (decision) color = decision.status === "accepted" ? "Green" : "Red";
 
     const embed = new EmbedBuilder()
         .setTitle(`📨┃Application #${app.id}: ${app.playerName}`)
+        .setURL(profileUrl(app.playerName))
         .setColor(color)
-        .setDescription(`Applicant: <@${app.discordId}>\nIGN: \`${app.playerName}\` (id ${app.playerId})`)
+        .setDescription(`Applicant: <@${app.discordId}>\nIGN: \`${app.playerName}\` (id ${app.playerId}) · [profile](${profileUrl(app.playerName)})`)
         .addFields(
-            { name: "Stats", value: stats },
+            { name: "Stats", value: statsText(profile) },
+            { name: "Turf (this season)", value: turfText(turf) },
             { name: "Main mode & region", value: a.modeRegion || "-" },
             { name: "Why join", value: (a.why || "-").slice(0, 1024) },
             { name: "Willing to 1v1", value: a.duel || "-" },
@@ -189,7 +250,8 @@ export const handleApplicationSubmit = async function(interaction){
     const id = createApplication(db, { guildId: interaction.guildId, discordId: interaction.user.id, playerId: profile.player_id, playerName: profile.player_name, answers });
     const app = /** @type {import("./applications.js").Application} */ (getApplication(db, id));
     try {
-        const message = await channel.send({ embeds: [buildApplicationEmbed(app, profile, null)], components: [decisionComponents(id, false)] });
+        const turf = await api.getTurfPlayer(profile.player_id).catch(() => null);
+        const message = await channel.send({ embeds: [buildApplicationEmbed(app, profile, null, turf)], components: [decisionComponents(id, false, profileUrl(app.playerName))] });
         setApplicationMessage(db, id, channel.id, message.id);
     }
     catch (error){
@@ -224,6 +286,7 @@ const decide = async function(interaction, app, status, reason){
     const { guild } = /** @type {{ guild: import("discord.js").Guild }} */ (interaction);
     const db = getClanDb();
     const profile = await api.getPlayer(app.playerName).catch(() => null);
+    const turf = profile ? await api.getTurfPlayer(profile.player_id).catch(() => null) : null;
 
     await finalizeDecision(db, {
         id: app.id,
@@ -257,8 +320,8 @@ const decide = async function(interaction, app, status, reason){
                 const message = channel?.isTextBased() ? await channel.messages.fetch(decided.messageId ?? "").catch(() => null) : null;
                 if (!message) return;
                 await message.edit({
-                    embeds: [buildApplicationEmbed(decided, profile, { status, reviewerId: decided.reviewerId ?? "", reason, decidedAt: decided.decidedAt ?? Date.now(), ...result })],
-                    components: [decisionComponents(decided.id, true)],
+                    embeds: [buildApplicationEmbed(decided, profile, { status, reviewerId: decided.reviewerId ?? "", reason, decidedAt: decided.decidedAt ?? Date.now(), ...result }, turf)],
+                    components: [decisionComponents(decided.id, true, profileUrl(decided.playerName))],
                 });
             },
         },
