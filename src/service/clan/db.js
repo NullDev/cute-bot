@@ -65,7 +65,8 @@ create table if not exists applications (
     created_at  integer not null,
     decided_at  integer,
     joined_at   integer,
-    reminded_at integer
+    reminded_at integer,
+    interview_channel_id text
 );
 create index if not exists applications_lookup on applications (guild_id, discord_id, status);
 `;
@@ -83,6 +84,9 @@ export const createClanDb = function(filePath){
         db.pragma("synchronous = NORMAL");
     }
     db.exec(SCHEMA);
+    // columns added after the first release, for databases created before them
+    const applicationColumns = db.pragma("table_info(applications)").map((/** @type {{ name: string }} */ c) => c.name);
+    if (!applicationColumns.includes("interview_channel_id")) db.exec("alter table applications add column interview_channel_id text");
     return db;
 };
 

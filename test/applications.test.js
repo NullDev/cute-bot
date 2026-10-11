@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createClanDb } from "../src/service/clan/db.js";
 import { linkPlayer, getLinkByDiscord } from "../src/service/clan/identity.js";
 import {
-    canApply, createApplication, setApplicationMessage, getApplication, finalizeDecision, listByStatus,
+    canApply, createApplication, setApplicationMessage, getApplication, finalizeDecision, listByStatus, setInterviewChannel,
     markJoined, markReminded, markExpired, planPendingJoins,
 } from "../src/service/clan/applications.js";
 
@@ -114,3 +114,14 @@ test("planPendingJoins splits into joined, remind and expire", () => {
     const later = planPendingJoins(apps.filter(a => a.id === 3), new Set(), now + 11 * DAY, { reminderDays: 3, expireDays: 14 });
     assert.deepEqual(later.expire.map(a => a.id), [3]);
 });
+
+test("the follow-up channel id is stored and cleared", () => {
+    const db = fresh();
+    const id = createApplication(db, { guildId: "g", discordId: "a", playerId: 1, playerName: "V", answers: ANSWERS, now: 0 });
+    assert.equal(getApplication(db, id).interviewChannelId, null);
+    setInterviewChannel(db, id, "chan");
+    assert.equal(getApplication(db, id).interviewChannelId, "chan");
+    setInterviewChannel(db, id, null);
+    assert.equal(getApplication(db, id).interviewChannelId, null);
+});
+

@@ -24,6 +24,7 @@ const DAY_MS = 86400000;
  * @property {number | null} decidedAt
  * @property {number | null} joinedAt
  * @property {number | null} remindedAt
+ * @property {string | null} interviewChannelId follow-up channel opened by a reviewer, null when none
  */
 
 /**
@@ -46,6 +47,7 @@ const toApp = row => (row ? {
     decidedAt: row.decided_at,
     joinedAt: row.joined_at,
     remindedAt: row.reminded_at,
+    interviewChannelId: row.interview_channel_id ?? null,
 } : null);
 
 /**
@@ -90,6 +92,17 @@ export const createApplication = function(db, { guildId, discordId, playerId, pl
  */
 export const setApplicationMessage = function(db, id, channelId, messageId){
     db.prepare("update applications set channel_id = ?, message_id = ? where id = ?").run(channelId, messageId, id);
+};
+
+/**
+ * Remember (or forget, with null) the follow-up channel of an application
+ *
+ * @param {import("better-sqlite3").Database} db
+ * @param {number} id
+ * @param {string | null} channelId
+ */
+export const setInterviewChannel = function(db, id, channelId){
+    db.prepare("update applications set interview_channel_id = ? where id = ?").run(channelId, id);
 };
 
 /**
