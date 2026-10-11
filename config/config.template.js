@@ -17,6 +17,8 @@ export default {
             applications_role_review: "",
             applications_channel: "",
             clan_category: "",
+            clan_general: "",
+            turf_role: "",
         },
     },
     clan: {
@@ -30,6 +32,13 @@ export default {
         cooldown_days: 7,
         join_reminder_days: 3,
         join_expire_days: 14,
+        // turf reminders in ids.clan.clan_general: checks every check_minutes, status reports at these UTC hours, instant alerts on changes
+        turf: {
+            check_minutes: 30,
+            report_hours_utc: [12, 18, 21, 23],
+            hold_position: 2,
+            close_margin: 100,
+        },
         review: {
             weights: { level: 1.0, nukes: 1.5, kdr: 1.0, kpg: 0.5, rank: 0.5, s7: 1.5, turf: 1.0, delta: 1.0 },
             penalties: { unlinked: 0.3 },

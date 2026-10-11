@@ -4,6 +4,7 @@ import LogHandler from "../crons/removeOldLogs.js";
 import { cleanupExpired as cleanupAiRateLimit } from "../ai/aiRateLimit.js";
 import drawGiveaways from "../crons/drawGiveaways.js";
 import clanDaily from "../crons/clanDaily.js";
+import { runTurfWatch, turfSettings } from "./clan/turfWatch.js";
 import { TIMEZONE, DRAW_HOUR, DRAW_MINUTE } from "./giveaway.js";
 
 // ========================= //
@@ -34,6 +35,12 @@ const scheduleCrons = async function(client){
     // daily clan snapshot + role sync, 03:30 UTC (turf day rolled over at 00:00 UTC)
     cron.schedule("30 3 * * *", async() => {
         await clanDaily(client);
+    }, { timezone: "UTC" });
+
+    // turf reminders, every check_minutes (UTC, the turf day ends at 00:00 UTC)
+    const turfEvery = Math.max(5, Math.min(60, Number(turfSettings().check_minutes) || 30));
+    cron.schedule(`*/${turfEvery} * * * *`, async() => {
+        await runTurfWatch(client).catch(e => Log.error("[TURF] watch failed: ", e instanceof Error ? e : new Error(String(e))));
     }, { timezone: "UTC" });
 
     const cronCount = cron.getTasks().size;
