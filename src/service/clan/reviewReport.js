@@ -1,6 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import defaults from "../../util/defaults.js";
 import { levelFromScore } from "./krunkerApi.js";
+import { earliestSnapshotDay } from "./snapshot.js";
 import { capField } from "./sync.js";
 
 // ========================= //
@@ -21,11 +22,16 @@ export const buildReviewRows = function(db, roster, links, day){
     const latest = db.prepare("select * from snapshots where player_id = ? and day <= ? order by day desc limit 1");
     const old = db.prepare("select score from snapshots where player_id = ? and day = ?");
     const turf = db.prepare("select coalesce(sum(kills), 0) as kills, coalesce(sum(games), 0) as games from turf_days where player_id = ? and day between ? and ?");
+    const firstSeen = db.prepare("select min(day) as d from snapshots where player_id = ? and in_clan = 1");
+    const historyStart = earliestSnapshotDay(db);
 
     return roster.members.map(m => {
         const s = latest.get(m.playerId, day) ?? {};
         const before = old.get(m.playerId, day - 14);
         const t = turf.get(m.playerId, day - 13, day);
+        // members already present on the first snapshot day have an unknown join date
+        const seen = firstSeen.get(m.playerId)?.d ?? null;
+        const memberDays = seen !== null && historyStart !== null && seen > historyStart ? day - seen : null;
         const kills = s.kills ?? 0;
         const deaths = s.deaths ?? 0;
         const games = s.games ?? 0;
@@ -43,6 +49,7 @@ export const buildReviewRows = function(db, roster, links, day){
             turf14Games: t.games,
             score14Delta: before && s.score !== undefined ? s.score - before.score : null,
             rankedRank: s.ranked_rank ?? 0,
+            memberDays,
             hours: Math.round((s.timeplayed ?? 0) / 3600000),
             since: String(s.created_at_game ?? "").slice(0, 10),
         };

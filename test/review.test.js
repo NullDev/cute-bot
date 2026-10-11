@@ -145,3 +145,17 @@ test("explainMember explains an inactive protected member", () => {
     assert.ok(text.includes("Verdict WATCH"), text);
 });
 
+test("a member who joined within the grace period is kept even with no stats", () => {
+    const fresh = { ...base, s7: 0, turf14Kills: 0, turf14Games: 0, level: 5, kdr: 0.4, memberDays: 2 };
+    const r = scoreMember(fresh, refs, DEFAULT_REVIEW);
+    assert.equal(r.grace, true);
+    assert.equal(r.verdict, "keep");
+    assert.match(r.reasons[0], /joined 2 days ago, grace period of 7 days/);
+    const old = scoreMember({ ...fresh, memberDays: 9 }, refs, DEFAULT_REVIEW);
+    assert.equal(old.verdict, "kick");
+    const unknown = scoreMember({ ...fresh, memberDays: null }, refs, DEFAULT_REVIEW);
+    assert.equal(unknown.verdict, "kick");
+    const text = explainMember(fresh, r, { ...refs, medLevel: 30, medKdr: 1.5, medKpg: 7 }, DEFAULT_REVIEW).join("\n");
+    assert.ok(text.includes("within the grace period"), text);
+});
+

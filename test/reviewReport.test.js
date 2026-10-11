@@ -47,6 +47,24 @@ test("buildReviewRows joins snapshot, turf sum and 14 day delta", () => {
     assert.equal(p3.kdr, 0);
 });
 
+test("buildReviewRows derives days since first seen on the roster, unknown for members present from day one", () => {
+    const db = createClanDb(":memory:");
+    upsertSnapshot(db, snap(1, 200, 1000));
+    upsertSnapshot(db, snap(1, 207, 1000));
+    upsertSnapshot(db, snap(2, 205, 1000));
+    upsertSnapshot(db, snap(2, 207, 1000));
+    upsertSnapshot(db, snap(3, 207, 1000, { in_clan: 0 }));
+    const roster = { members: [
+        { playerId: 1, playerName: "P1", rank: 0, s7: 0 },
+        { playerId: 2, playerName: "P2", rank: 0, s7: 0 },
+        { playerId: 3, playerName: "P3", rank: 0, s7: 0 },
+    ] };
+    const rows = buildReviewRows(db, roster, new Map(), 207);
+    assert.equal(rows.find(r => r.playerId === 1).memberDays, null, "present on the first snapshot day");
+    assert.equal(rows.find(r => r.playerId === 2).memberDays, 2);
+    assert.equal(rows.find(r => r.playerId === 3).memberDays, null, "never snapshotted as a member");
+});
+
 test("formatReviewTable has a header and one line per row", () => {
     const text = formatReviewTable([{
         playerId: 1, playerName: "P1", rank: 1, linked: true, level: 30, kdr: 2, kpg: 10, nukes: 3, s7: 50, turf14Kills: 12, turf14Games: 3,

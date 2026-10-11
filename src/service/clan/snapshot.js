@@ -140,3 +140,25 @@ export const hasSnapshotForDay = function(db, day){
 export const latestSnapshotDay = function(db){
     return db.prepare("select max(day) as d from snapshots").get()?.d ?? null;
 };
+
+/**
+ * First turf day a player was snapshotted as a clan member, or null
+ *
+ * @param {import("better-sqlite3").Database} db
+ * @param {number} playerId
+ * @return {number | null}
+ */
+export const firstSeenInClanDay = function(db, playerId){
+    return db.prepare("select min(day) as d from snapshots where player_id = ? and in_clan = 1").get(playerId)?.d ?? null;
+};
+
+/**
+ * Earliest day with any snapshot, or null
+ *
+ * @param {import("better-sqlite3").Database} db
+ * @return {number | null}
+ */
+export const earliestSnapshotDay = function(db){
+    return db.prepare("select min(day) as d from snapshots").get()?.d ?? null;
+};
+

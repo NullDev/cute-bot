@@ -8,6 +8,7 @@ export const DEFAULT_REVIEW = Object.freeze({
     roleBonus: { 0: 0, 1: 0.3, 2: 0.6, 3: 0.6 },
     protect: { nukes: 50, level: 100, rank: 2 },
     thresholds: { kick: 1.0, watch: 2.0 },
+    grace_days: 7,
 });
 
 /**
@@ -25,6 +26,7 @@ export const DEFAULT_REVIEW = Object.freeze({
  * @property {number} turf14Games
  * @property {number | null} score14Delta
  * @property {number} rankedRank
+ * @property {number | null} [memberDays] days since first seen on the roster, null when unknown or not a member
  */
 
 /**
@@ -108,11 +110,18 @@ export const scoreMember = function(row, refs, cfg){
     const inactive = isInactive(row);
     const isProtected = row.nukes >= cfg.protect.nukes || row.level >= cfg.protect.level || row.rank >= cfg.protect.rank;
 
+    const memberDays = row.memberDays ?? null;
+    const grace = memberDays !== null && memberDays < (cfg.grace_days ?? 0);
+
     /** @type {"keep" | "watch" | "kick"} */
     let verdict;
     /** @type {string[]} */
     let reasons;
-    if (inactive && !isProtected){
+    if (grace){
+        verdict = "keep";
+        reasons = [`joined ${memberDays} days ago, grace period of ${cfg.grace_days} days`];
+    }
+    else if (inactive && !isProtected){
         verdict = "kick";
         reasons = ["no clan score in 7 days and no turf games in 14 days"];
     }
@@ -130,7 +139,7 @@ export const scoreMember = function(row, refs, cfg){
         reasons = verdict === "keep" ? [] : weakest;
     }
 
-    return { paper, activity, bonus, total, inactive, "protected": isProtected, verdict, reasons, terms };
+    return { paper, activity, bonus, total, inactive, "protected": isProtected, grace, verdict, reasons, terms };
 };
 
 /**
@@ -222,6 +231,7 @@ export const explainMember = function(row, result, refs, cfg){
     }
 
     // verdict
+    if (result.grace) lines.push(`Joined the clan ${row.memberDays} days ago, within the grace period of ${cfg.grace_days} days, so activity is not held against them yet.`);
     const total = result.total.toFixed(2);
     const parts = `(paper ${result.paper.toFixed(2)}, activity ${result.activity.toFixed(2)}, bonus ${result.bonus.toFixed(2)})`;
     if (row.s7 === null){
