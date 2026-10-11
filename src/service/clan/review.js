@@ -151,7 +151,8 @@ export const scoreMember = function(row, refs, cfg){
  * @return {{ medPaper: number, medActivity: number }}
  */
 export const computeScoreMedians = function(rows, refs, cfg){
-    const scored = rows.map(r => scoreMember(r, refs, cfg));
+    // members without a snapshot yet (level 0) would drag the paper median to -1
+    const scored = rows.filter(r => r.level > 0).map(r => scoreMember(r, refs, cfg));
     const active = scored.filter(s => !s.inactive);
     return {
         medPaper: scored.length ? median(scored.map(s => s.paper)) : 0,
@@ -181,6 +182,20 @@ const relation = function(value, ref){
 };
 
 /**
+ * "above", "below" or "around" a reference score, by difference (scores can be negative or zero)
+ *
+ * @param {number} value
+ * @param {number} ref
+ * @param {number} [tolerance=0.25]
+ * @return {string}
+ */
+const relationByDiff = function(value, ref, tolerance = 0.25){
+    if (value - ref > tolerance) return "above";
+    if (ref - value > tolerance) return "below";
+    return "around";
+};
+
+/**
  * Plain-language reasoning behind a verdict, one sentence per line
  *
  * @param {ReviewRow} row
@@ -192,6 +207,7 @@ const relation = function(value, ref){
 export const explainMember = function(row, result, refs, cfg){
     const lines = [];
     const lvl = Math.min(row.level, 150);
+    if (row.s7 !== null && row.level === 0) lines.push("No daily snapshot for this member yet, so the paper stats below are unknown until the next nightly run.");
 
     // activity
     if (result.inactive){
@@ -241,8 +257,8 @@ export const explainMember = function(row, result, refs, cfg){
     }
     else lines.push(`Verdict ${result.verdict.toUpperCase()} with a total of ${total} ${parts}; watch below ${cfg.thresholds.watch}, kick below ${cfg.thresholds.kick}.`);
     if (!result.inactive && refs.medPaper !== undefined && refs.medActivity !== undefined){
-        const paperRel = relation(result.paper, refs.medPaper);
-        const activityRel = relation(result.activity, refs.medActivity);
+        const paperRel = relationByDiff(result.paper, refs.medPaper);
+        const activityRel = relationByDiff(result.activity, refs.medActivity);
         lines.push(`Paper stats score ${result.paper.toFixed(2)}, ${paperRel} the clan median of ${refs.medPaper.toFixed(2)}; recent activity scores ${result.activity.toFixed(2)}, ${activityRel} the clan median of ${refs.medActivity.toFixed(2)}.`);
         if (activityRel === "above" && paperRel === "below") lines.push("Activity carries this verdict: the member plays a lot but looks weaker than the clan on paper.");
         else if (paperRel === "above" && activityRel === "below") lines.push("Paper stats carry this verdict: the member looks good on paper but has been quieter than the clan lately.");

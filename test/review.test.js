@@ -159,3 +159,25 @@ test("a member who joined within the grace period is kept even with no stats", (
     assert.ok(text.includes("within the grace period"), text);
 });
 
+test("score medians ignore members without a snapshot and the comparison copes with negative medians", () => {
+    const rows = [
+        { ...base, level: 0, kdr: 0, kpg: 0 },
+        { ...base, level: 0, kdr: 0, kpg: 0 },
+        { ...base, level: 40, kdr: 1.5 },
+    ];
+    const meds = computeScoreMedians(rows, refs, DEFAULT_REVIEW);
+    assert.ok(meds.medPaper > 0, `median paper should come from snapshotted members, got ${meds.medPaper}`);
+
+    const star = { ...base, level: 150, kdr: 4.14, kpg: 13.5, nukes: 924, rank: 1, s7: 811115, turf14Kills: 1672, turf14Games: 94 };
+    const fullRefs = { ...refs, medLevel: 81, medKdr: 2.33, medKpg: 8.4, medPaper: -1.0, medActivity: 2.05 };
+    const result = scoreMember(star, fullRefs, DEFAULT_REVIEW);
+    const text = explainMember(star, result, fullRefs, DEFAULT_REVIEW).join("\n");
+    assert.ok(text.includes("above the clan median of -1.00"), text);
+    assert.ok(text.includes("Both paper stats and recent activity are at or above the clan median."), text);
+    assert.ok(!text.includes("looks weaker"), text);
+
+    const unsnapshotted = { ...base, level: 0, kdr: 0, kpg: 0 };
+    const text2 = explainMember(unsnapshotted, scoreMember(unsnapshotted, fullRefs, DEFAULT_REVIEW), fullRefs, DEFAULT_REVIEW).join("\n");
+    assert.ok(text2.includes("No daily snapshot for this member yet"), text2);
+});
+
