@@ -73,6 +73,7 @@ Once the config has been copied like described in [Step 4](#wrench-setup), it ca
 | ids: clan: <br> `applications_channel` | Channel where applications are posted and decided | string | N/A |
 | clan: <br> `id`, `name` | Krunker clan id and tag | number, string | 561461, "cute" |
 | clan: <br> `sync_enabled` | Enable the automatic daily role sync; keep false until the migration and a dry run are done | boolean | false |
+| clan: <br> `api_proxy` | Optional http(s) proxy URL for all Krunker API calls, for hosts whose IP Krunker's edge blocks (Cloudflare 403). Empty = direct | string | "" |
 | clan: <br> `target_size` | Member count the review aims for | number | 100 |
 | clan: <br> `cooldown_days` | Days before a rejected applicant may apply again | number | 7 |
 | clan: <br> `join_reminder_days`, `join_expire_days` | Days until an accepted applicant is reminded / expired for not joining in game | number | 3, 14 |

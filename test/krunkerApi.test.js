@@ -97,3 +97,20 @@ test("concurrent get calls are spaced apart", async() => {
     assert.equal(sleeps.length, 1);
     assert.ok(sleeps[0] > 0 && sleeps[0] <= 200);
 });
+
+test("proxyUrl routes requests through a proxy dispatcher", async() => {
+    const inits = [];
+    const fetchFn = async(url, init) => {
+        inits.push(init);
+        return { status: 200, ok: true, json: async() => ({ data: {} }) };
+    };
+    const direct = new KrunkerApi({ fetchFn, sleep: noSleep });
+    await direct.get("/x");
+    assert.equal(inits[0].dispatcher, undefined);
+
+    const proxied = new KrunkerApi({ fetchFn, sleep: noSleep, proxyUrl: "http://proxy.example:3128" });
+    await proxied.get("/x");
+    assert.ok(inits[1].dispatcher, "dispatcher set when proxyUrl is given");
+    assert.equal(inits[1].dispatcher.constructor.name, "ProxyAgent");
+});
+

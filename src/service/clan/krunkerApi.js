@@ -1,3 +1,6 @@
+import { ProxyAgent } from "undici";
+import { config } from "../../../config/config.js";
+
 // ========================= //
 // = Copyright (c) NullDev = //
 // ========================= //
@@ -55,13 +58,15 @@ export class KrunkerApiError extends Error {
  */
 export class KrunkerApi {
     /**
-     * @param {{ fetchFn?: typeof fetch, sleep?: (ms: number) => Promise<void>, spacingMs?: number }} [options]
+     * @param {{ fetchFn?: typeof fetch, sleep?: (ms: number) => Promise<void>, spacingMs?: number, proxyUrl?: string }} [options]
+     *   proxyUrl: optional http(s) proxy for every request, for hosts whose own IP is blocked by Krunker's edge
      */
-    constructor({ fetchFn = globalThis.fetch, sleep = ms => new Promise(r => setTimeout(r, ms)), spacingMs = 200 } = {}){
+    constructor({ fetchFn = globalThis.fetch, sleep = ms => new Promise(r => setTimeout(r, ms)), spacingMs = 200, proxyUrl = "" } = {}){
         this.fetchFn = fetchFn;
         this.sleep = sleep;
         this.spacingMs = spacingMs;
         this.lastCall = 0;
+        this.dispatcher = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
     }
 
     #queue = Promise.resolve();
@@ -93,7 +98,7 @@ export class KrunkerApi {
             await this.#space();
             let res;
             try {
-                res = await this.fetchFn(BASE_URL + path, { headers: { Accept: "application/json" } });
+                res = await this.fetchFn(BASE_URL + path, { headers: { Accept: "application/json" }, dispatcher: this.dispatcher });
             }
             catch {
                 lastStatus = 0;
@@ -181,4 +186,4 @@ export class KrunkerApi {
     }
 }
 
-export const api = new KrunkerApi();
+export const api = new KrunkerApi({ proxyUrl: config.clan?.api_proxy || "" });

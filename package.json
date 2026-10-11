@@ -43,6 +43,7 @@
     "discord-hybrid-sharding": "^3.0.1",
     "discord.js": "^14.27.0",
     "node-cron": "^4.6.0",
-    "quick.db": "^9.1.7"
+    "quick.db": "^9.1.7",
+    "undici": "^6.29.0"
   }
 }

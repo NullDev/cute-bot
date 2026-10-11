@@ -21,6 +21,7 @@ export default {
         id: 561461,
         name: "cute",
         sync_enabled: false,
+        api_proxy: "",
         target_size: 100,
         cooldown_days: 7,
         join_reminder_days: 3,
