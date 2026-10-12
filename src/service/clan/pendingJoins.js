@@ -2,6 +2,11 @@ import Log from "../../util/log.js";
 import { config } from "../../../config/config.js";
 import { rosterByPlayerId } from "./roster.js";
 import { listByStatus, planPendingJoins, markJoined, markReminded, markExpired } from "./applications.js";
+import { fetchRoster } from "./roster.js";
+import { syncOneMember } from "./sync.js";
+import { api } from "./krunkerApi.js";
+import { getClanDb } from "./db.js";
+import { mainClan, mainGuildId } from "./clans.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -34,6 +39,9 @@ export const checkPendingJoins = async function(client, db, roster, guildId, { n
 
     for (const app of plan.joined){
         markJoined(db, app.id, now);
+        // the roster shows them now: give recruit (or their rank) right away instead of waiting for the nightly sync
+        const member = guild ? await guild.members.fetch(app.discordId).catch(() => null) : null;
+        if (member) await syncOneMember(member, { db }).catch(() => null);
         await dm(app.discordId, "🎉 You are in **[cute]** now. Welcome!");
         await notify(`✅ <@${app.discordId}> (\`${app.playerName}\`) joined the clan in game (application #${app.id}).`);
     }
@@ -43,9 +51,26 @@ export const checkPendingJoins = async function(client, db, roster, guildId, { n
     }
     for (const app of plan.expire){
         markExpired(db, app.id, now);
-        await notify(`⌛ <@${app.discordId}> (\`${app.playerName}\`) never joined in game within ${config.clan.join_expire_days} days (application #${app.id}). Their recruit role will be removed by the next sync.`);
+        await notify(`⌛ <@${app.discordId}> (\`${app.playerName}\`) never joined in game within ${config.clan.join_expire_days} days (application #${app.id}). No clan roles were given.`);
     }
 
     Log.done(`[CLAN] Pending joins: ${plan.joined.length} joined, ${plan.remind.length} reminded, ${plan.expire.length} expired`);
     return { joined: plan.joined.length, reminded: plan.remind.length, expired: plan.expire.length };
 };
+
+/**
+ * Hourly tick: only fetches the roster while someone accepted is still waiting to show up in game
+ *
+ * @param {import("../client.js").default} client
+ * @return {Promise<void>}
+ */
+export const pendingJoinsTick = async function(client){
+    const clan = mainClan();
+    const guildId = mainGuildId() || [...client.guilds.cache.keys()][0] || "";
+    if (!clan || !guildId) return;
+    const db = getClanDb();
+    if (!listByStatus(db, guildId, "accepted").length) return;
+    const roster = await fetchRoster(db, api, { clanName: clan.name });
+    await checkPendingJoins(client, db, roster, guildId);
+};
+

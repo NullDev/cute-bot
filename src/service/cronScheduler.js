@@ -5,6 +5,7 @@ import { cleanupExpired as cleanupAiRateLimit } from "../ai/aiRateLimit.js";
 import drawGiveaways from "../crons/drawGiveaways.js";
 import clanDaily from "../crons/clanDaily.js";
 import { runTurfWatch, turfSettings } from "./clan/turfWatch.js";
+import { pendingJoinsTick } from "./clan/pendingJoins.js";
 import { TIMEZONE, DRAW_HOUR, DRAW_MINUTE } from "./giveaway.js";
 
 // ========================= //
@@ -41,6 +42,11 @@ const scheduleCrons = async function(client){
     const turfEvery = Math.max(5, Math.min(60, Number(turfSettings().check_minutes) || 30));
     cron.schedule(`*/${turfEvery} * * * *`, async() => {
         await runTurfWatch(client).catch(e => Log.error("[TURF] watch failed: ", e instanceof Error ? e : new Error(String(e))));
+    }, { timezone: "UTC" });
+
+    // accepted applicants who still have to join in game: checked hourly so their roles arrive within the hour
+    cron.schedule("15 * * * *", async() => {
+        await pendingJoinsTick(client).catch(e => Log.error("[CLAN] pending joins tick failed: ", e instanceof Error ? e : new Error(String(e))));
     }, { timezone: "UTC" });
 
     const cronCount = cron.getTasks().size;

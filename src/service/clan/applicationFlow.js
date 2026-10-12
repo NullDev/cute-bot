@@ -316,7 +316,8 @@ const decide = async function(interaction, app, status, reason){
         effects: {
             grantRoles: async() => {
                 const target = await guild.members.fetch(app.discordId);
-                await target.roles.add([config.ids.verified_role, config.ids.clan.recruit], `application #${app.id} accepted`);
+                // verified now; recruit and any higher rank arrive once the roster shows them (syncOneMember covers the "already in the clan" case)
+                await target.roles.add([config.ids.verified_role], `application #${app.id} accepted`);
                 await syncOneMember(target).catch(() => null);
             },
             dm: async() => {

@@ -27,7 +27,6 @@ test("computeDiff adds missing, removes extra, strips unlinked, keeps other role
         ],
         links: new Map([["soldier", { playerId: 1 }], ["demoted", { playerId: 2 }], ["left", { playerId: 3 }]]),
         roster: new Map([[1, { rank: RANK.SOLDIER }], [2, { rank: RANK.RECRUIT }]]),
-        exempt: new Set(),
         roleIds: IDS,
     });
     assert.deepEqual(diff.add, [{ discordId: "soldier", roleIds: ["S"] }]);
@@ -39,16 +38,15 @@ test("computeDiff adds missing, removes extra, strips unlinked, keeps other role
     assert.deepEqual(diff.unlinkedWithRoles, ["unlinked"]);
 });
 
-test("computeDiff keeps recruit for exempt accepted applicants", () => {
+test("computeDiff gives accepted applicants nothing until the roster shows them", () => {
     const diff = computeDiff({
         members: [{ discordId: "a", roleIds: [] }, { discordId: "b", roleIds: ["R", "S"] }],
         links: new Map([["a", { playerId: 1 }], ["b", { playerId: 2 }]]),
         roster: new Map([[9, { rank: 0 }]]),
-        exempt: new Set(["a", "b"]),
         roleIds: IDS,
     });
-    assert.deepEqual(diff.add, [{ discordId: "a", roleIds: ["R"] }]);
-    assert.deepEqual(diff.remove, [{ discordId: "b", roleIds: ["S"] }]);
+    assert.deepEqual(diff.add, []);
+    assert.deepEqual(diff.remove, [{ discordId: "b", roleIds: ["R", "S"] }]);
 });
 
 test("computeDiff ignores links whose member is gone", () => {
@@ -56,14 +54,13 @@ test("computeDiff ignores links whose member is gone", () => {
         members: [],
         links: new Map([["gone", { playerId: 1 }]]),
         roster: new Map([[1, { rank: 0 }]]),
-        exempt: new Set(),
         roleIds: IDS,
     });
     assert.deepEqual(diff, { add: [], remove: [], unlinkedWithRoles: [] });
 });
 
 test("computeDiff refuses an empty roster", () => {
-    assert.throws(() => computeDiff({ members: [], links: new Map(), roster: new Map(), exempt: new Set(), roleIds: IDS }), /empty/);
+    assert.throws(() => computeDiff({ members: [], links: new Map(), roster: new Map(), roleIds: IDS }), /empty/);
 });
 
 test("capField leaves short text and cuts long text on a line boundary", () => {

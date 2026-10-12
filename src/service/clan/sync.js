@@ -39,10 +39,10 @@ export const hasClanRoleIds = function(roleIds){
 /**
  * Pure role diff between Discord and the roster
  *
- * @param {{ members: Array<{ discordId: string, roleIds: string[] }>, links: Map<string, { playerId: number }>, roster: Map<number, { rank: number }>, exempt: Set<string>, roleIds: { recruit: string, soldier: string, captain: string } }} input
+ * @param {{ members: Array<{ discordId: string, roleIds: string[] }>, links: Map<string, { playerId: number }>, roster: Map<number, { rank: number }>, roleIds: { recruit: string, soldier: string, captain: string } }} input
  * @return {{ add: Array<{ discordId: string, roleIds: string[] }>, remove: Array<{ discordId: string, roleIds: string[] }>, unlinkedWithRoles: string[] }}
  */
-export const computeDiff = function({ members, links, roster, exempt, roleIds }){
+export const computeDiff = function({ members, links, roster, roleIds }){
     if (roster.size === 0) throw new Error("Refusing to sync against an empty roster");
     const clanRoles = [roleIds.recruit, roleIds.soldier, roleIds.captain];
     const add = [];
@@ -54,9 +54,7 @@ export const computeDiff = function({ members, links, roster, exempt, roleIds })
         const link = links.get(member.discordId);
         const entry = link ? roster.get(link.playerId) : undefined;
 
-        let want = [];
-        if (entry) want = rolesForRank(entry.rank, roleIds);
-        else if (exempt.has(member.discordId)) want = [roleIds.recruit];
+        const want = entry ? rolesForRank(entry.rank, roleIds) : [];
 
         if (!link && have.length) unlinkedWithRoles.push(member.discordId);
 
@@ -185,18 +183,6 @@ export const buildSyncEmbed = function({ diff, result, dryRun, roster, skippedRe
 };
 
 /**
- * Discord ids of accepted applicants who have not joined in game yet
- *
- * @param {import("better-sqlite3").Database} db
- * @param {string} guildId
- * @return {Set<string>}
- */
-const exemptApplicants = function(db, guildId){
-    const rows = db.prepare("select discord_id from applications where guild_id = ? and status = 'accepted'").all(guildId);
-    return new Set(rows.map(r => r.discord_id));
-};
-
-/**
  * Run a full sync for a guild
  *
  * @param {import("../client.js").default} client
@@ -218,7 +204,6 @@ export const runClanSync = async function(client, guildId, { dryRun = false, for
         members,
         links: listLinks(db, guildId),
         roster: rosterByPlayerId(roster),
-        exempt: exemptApplicants(db, guildId),
         roleIds: config.ids.clan,
     });
     const { diff, skippedRemovals } = guardRemovals(full, roster, force);
