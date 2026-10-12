@@ -12,10 +12,12 @@ import { mainClan } from "./clans.js";
 
 export const DEFAULT_TURF = Object.freeze({
     check_minutes: 30,
-    report_hours_utc: [12, 18, 21, 23],
+    quiet_until_hour_utc: 16,
+    report_hours_utc: [18, 22],
     hold_position: 2,
     close_margin: 150,
-    max_pings_per_day: 2,
+    give_up_deficit: 1000,
+    max_pings_per_day: 3,
 });
 
 /**
@@ -125,17 +127,36 @@ export const timeLeftText = function(now = new Date()){
 };
 
 /**
+ * A lost map nobody can win back today
+ *
+ * @param {MapAssessment} a
+ * @param {{ give_up_deficit: number }} cfg
+ * @return {boolean}
+ */
+export const outOfReach = (a, cfg) => a.state === "lost" && a.deficit !== null && a.deficit > cfg.give_up_deficit;
+
+/**
+ * Whether the current standings need people to play: a close race, a lost map still in reach, or a map without kills
+ *
+ * @param {MapAssessment[]} maps
+ * @param {{ give_up_deficit: number }} [cfg=DEFAULT_TURF]
+ * @return {boolean}
+ */
+export const actionNeeded = (maps, cfg = DEFAULT_TURF) => maps.some(m => m.state !== "safe" && !outOfReach(m, cfg));
+
+/**
  * One line per map
  *
  * @param {MapAssessment} a
- * @param {{ hold_position: number }} cfg
+ * @param {{ hold_position: number, give_up_deficit?: number }} cfg
  * @return {string}
  */
 export const mapLine = function(a, cfg){
     if (a.state === "none") return `**${a.mapName}**: no kills yet today`;
     if (a.state === "lost"){
         const need = a.deficit !== null && a.target ? `, ${num(a.deficit)} more kills needed to pass ${a.target} for #${cfg.hold_position}` : "";
-        return `**${a.mapName}**: #${a.position} with ${num(a.kills)} kills${need} 🚨`;
+        const flag = outOfReach(a, /** @type {any} */ (cfg)) ? " (out of reach today)" : " 🚨";
+        return `**${a.mapName}**: #${a.position} with ${num(a.kills)} kills${need}${flag}`;
     }
     const lead = a.lead !== null && a.chaser ? `, ${num(a.lead)} ahead of ${a.chaser}` : "";
     const flag = a.state === "close" ? " ⚠️" : "";
@@ -174,14 +195,6 @@ export const headline = function(maps, cfg){
 };
 
 /**
- * Whether the current standings need people to play
- *
- * @param {MapAssessment[]} maps
- * @return {boolean}
- */
-export const actionNeeded = maps => maps.some(m => m.state !== "safe");
-
-/**
  * Role mention prefix when action is needed and the daily ping budget allows it, empty otherwise
  *
  * @param {boolean} needed
@@ -204,7 +217,7 @@ export const ping = function(needed, budget = { pingsToday: 0, cfg: DEFAULT_TURF
  * @return {{ content: string, embed: EmbedBuilder, needed: boolean, pinged: boolean }}
  */
 export const composeTurfReport = function(maps, cfg, now = new Date(), pingsToday = 0){
-    const needed = actionNeeded(maps);
+    const needed = actionNeeded(maps, cfg);
     const prefix = ping(needed, { pingsToday, cfg });
     const embed = new EmbedBuilder()
         .setColor(needed ? "Orange" : defaults.embed_color)
@@ -237,13 +250,15 @@ export const alertText = function(a, previous, cfg){
 };
 
 /**
- * Decide what to post this tick: a report at the configured hours (once per hour and day), and alerts on state changes (once per map and state per day)
+ * Decide what to post this tick: nothing during the quiet period, a report at the configured hours (once per hour and day), and alerts on state changes (once per map and state per day)
  *
  * @param {{ maps: MapAssessment[], previous: Record<number, string>, posted: Set<string>, now: Date, cfg: typeof DEFAULT_TURF }} input
- * @return {{ report: boolean, alerts: Array<{ key: string, text: string }>, keys: string[] }}
+ * @return {{ report: boolean, alerts: Array<{ key: string, text: string, needed: boolean }>, keys: string[] }}
  */
 export const decideTurfPosts = function({ maps, previous, posted, now, cfg }){
     const hour = now.getUTCHours();
+    // early positions flip constantly and nobody can act on them: stay silent until the quiet period ends
+    if (hour < cfg.quiet_until_hour_utc) return { report: false, alerts: [], keys: [] };
     const reportKey = `report:${hour}`;
     const report = cfg.report_hours_utc.includes(hour) && !posted.has(reportKey);
     const alerts = [];
@@ -255,7 +270,7 @@ export const decideTurfPosts = function({ maps, previous, posted, now, cfg }){
         if (posted.has(key)) continue;
         const text = alertText(a, prev, cfg);
         if (!text) continue;
-        alerts.push({ key, text });
+        alerts.push({ key, text, needed: a.state !== "safe" && !outOfReach(a, cfg) });
         keys.push(key);
     }
     // a report already says everything, do not repeat it as alerts in the same tick
@@ -314,14 +329,15 @@ export const runTurfWatch = async function(client, { db = getClanDb(), krunker =
         }
         count++;
     }
-    for (const alert of decision.alerts){
-        // "we are back" news needs nobody; warnings and losses do, within the daily ping budget
-        const needed = !alert.text.startsWith("✅");
+    if (decision.alerts.length){
+        // every change of this tick in one message with at most one ping; "we are back" news alone needs nobody
+        const needed = decision.alerts.some(a => a.needed);
         const prefix = ping(needed, { pingsToday, cfg });
-        await channel.send({ content: prefix + alert.text, allowedMentions: { roles, users: [] } });
+        const body = decision.alerts.length === 1 ? decision.alerts[0].text : decision.alerts.map(a => `• ${a.text}`).join("\n");
+        await channel.send({ content: prefix + body, allowedMentions: { roles, users: [] } });
         if (prefix){
             pingsToday++;
-            logKey.run(day, `ping:${alert.key}`, now.getTime());
+            logKey.run(day, `ping:alerts:${now.getTime()}`, now.getTime());
         }
         count++;
     }

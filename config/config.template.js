@@ -32,13 +32,15 @@ export default {
         cooldown_days: 7,
         join_reminder_days: 3,
         join_expire_days: 14,
-        // turf reminders in ids.clan.clan_general: checks every check_minutes, status reports at these UTC hours, instant alerts on changes
+        // turf reminders in ids.clan.clan_general: silent until quiet_until_hour_utc, then bundled alerts on changes and status reports at report_hours_utc
         turf: {
             check_minutes: 30,
-            report_hours_utc: [12, 18, 21, 23],
+            quiet_until_hour_utc: 16,
+            report_hours_utc: [18, 22],
             hold_position: 2,
             close_margin: 150,
-            max_pings_per_day: 2,
+            give_up_deficit: 1000,
+            max_pings_per_day: 3,
         },
         review: {
             weights: { level: 1.0, nukes: 1.5, kdr: 1.0, kpg: 0.5, rank: 0.5, s7: 1.5, turf: 1.0, delta: 1.0 },

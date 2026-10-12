@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-    DEFAULT_TURF, mergeStandings, assessTurf, headline, mapLine, alertText, decideTurfPosts, composeTurfReport, timeLeftText, actionNeeded, ping,
+    DEFAULT_TURF, mergeStandings, assessTurf, headline, mapLine, alertText, decideTurfPosts, composeTurfReport, timeLeftText, actionNeeded, ping, outOfReach,
 } from "../src/service/clan/turfWatch.js";
 import { config } from "../config/config.js";
 
@@ -107,7 +107,7 @@ test("alerts fire on meaningful transitions only", () => {
 test("decideTurfPosts reports at the configured hours once and alerts once per map and state", () => {
     const safe = assessTurf(standings(), CFG);
     const at = (/** @type {number} */ h) => new Date(Date.UTC(2026, 9, 11, h, 5));
-    const quiet = decideTurfPosts({ maps: safe, previous: {}, posted: new Set(), now: at(10), cfg: CFG });
+    const quiet = decideTurfPosts({ maps: safe, previous: {}, posted: new Set(), now: at(17), cfg: CFG });
     assert.deepEqual(quiet, { report: false, alerts: [], keys: [] });
 
     const report = decideTurfPosts({ maps: safe, previous: {}, posted: new Set(), now: at(18), cfg: CFG });
@@ -117,13 +117,23 @@ test("decideTurfPosts reports at the configured hours once and alerts once per m
     assert.equal(again.report, false);
 
     const close = safe.map(m => (m.mapName === "Subzero" ? { ...m, state: "close", lead: 21 } : m));
-    const alert = decideTurfPosts({ maps: close, previous: { 3: "safe" }, posted: new Set(), now: at(10), cfg: CFG });
+    const alert = decideTurfPosts({ maps: close, previous: { 3: "safe" }, posted: new Set(), now: at(19), cfg: CFG });
     assert.equal(alert.alerts.length, 1);
+    assert.equal(alert.alerts[0].needed, true);
     assert.deepEqual(alert.keys, ["alert:3:close"]);
-    const dup = decideTurfPosts({ maps: close, previous: { 3: "safe" }, posted: new Set(["alert:3:close"]), now: at(10), cfg: CFG });
+    const dup = decideTurfPosts({ maps: close, previous: { 3: "safe" }, posted: new Set(["alert:3:close"]), now: at(19), cfg: CFG });
     assert.equal(dup.alerts.length, 0);
-    const unchanged = decideTurfPosts({ maps: close, previous: { 3: "close" }, posted: new Set(), now: at(10), cfg: CFG });
+    const unchanged = decideTurfPosts({ maps: close, previous: { 3: "close" }, posted: new Set(), now: at(19), cfg: CFG });
     assert.equal(unchanged.alerts.length, 0);
+
+    // the quiet period swallows everything, even changes and report hours
+    const early = decideTurfPosts({ maps: close, previous: { 3: "safe" }, posted: new Set(), now: at(2), cfg: { ...CFG, report_hours_utc: [2] } });
+    assert.deepEqual(early, { report: false, alerts: [], keys: [] });
+
+    // a recovery alone needs nobody
+    const back = decideTurfPosts({ maps: safe, previous: { 2: "lost" }, posted: new Set(), now: at(19), cfg: CFG });
+    assert.equal(back.alerts.length, 1);
+    assert.equal(back.alerts[0].needed, false);
 });
 
 test("the report carries the map lines and the time left", () => {
@@ -160,5 +170,22 @@ test("the shipped close margin is 150 kills", () => {
     assert.equal(DEFAULT_TURF.close_margin, 150);
     const a = assessTurf(standings(), DEFAULT_TURF);
     assert.deepEqual(a.map(m => m.state), ["safe", "safe", "close"]);
+});
+
+test("hopeless lost maps are out of reach and do not count as action needed", () => {
+    const safe = assessTurf(standings(), CFG);
+    const hopeless = { ...safe[0], state: "lost", position: 4, lead: null, chaser: null, deficit: 2500, target: "SIBU" };
+    const reachable = { ...safe[0], state: "lost", position: 3, lead: null, chaser: null, deficit: 200, target: "SIBU" };
+    assert.equal(outOfReach(hopeless, CFG), true);
+    assert.equal(outOfReach(reachable, CFG), false);
+    assert.equal(actionNeeded([safe[1], safe[2], hopeless], CFG), false);
+    assert.equal(actionNeeded([safe[1], safe[2], reachable], CFG), true);
+    assert.match(mapLine(hopeless, CFG), /out of reach today/);
+});
+
+test("the shipped schedule is quiet until 16:00 UTC with reports at 18 and 22 and three pings", () => {
+    assert.equal(DEFAULT_TURF.quiet_until_hour_utc, 16);
+    assert.deepEqual(DEFAULT_TURF.report_hours_utc, [18, 22]);
+    assert.equal(DEFAULT_TURF.max_pings_per_day, 3);
 });
 
