@@ -76,16 +76,19 @@ test("outside the top five we still get our own kills and the hold line from the
 
 test("headline wording for the four situations", () => {
     const safe = assessTurf(standings(), CFG);
-    assert.equal(headline(safe, CFG), "We are steadily holding turf on all three maps :3");
+    assert.equal(headline(safe, CFG), "We are steadily holding #2 on Burg, Sandstorm and Subzero :3");
 
     const close = assessTurf(standings(), { hold_position: 2, close_margin: 150 });
     assert.equal(headline(close, CFG), "⚠️ SIBU is only 117 kills away from taking our second place on Subzero.");
 
     const mixed = safe.map(m => (m.mapName === "Sandstorm" ? { ...m, state: "lost", position: 3, lead: null, chaser: null, deficit: 86, target: "SIBU" } : m));
-    assert.equal(headline(mixed, CFG), "We are holding Burg and Subzero but not Sandstorm. SIBU is 85 kills ahead of us for #2 on Sandstorm.");
+    assert.equal(headline(mixed, CFG), "We are holding #2 on Burg and Subzero, but only #3 on Sandstorm. SIBU is 85 kills ahead of us for #2 on Sandstorm.");
 
     const none = safe.map(m => ({ ...m, state: "lost", position: 4, lead: null, chaser: null, deficit: 120, target: "SIBU" }));
-    assert.equal(headline(none, CFG), "🚨 We are not holding any map right now.\n• SIBU is 119 kills ahead of us for #2 on Burg\n• SIBU is 119 kills ahead of us for #2 on Sandstorm\n• SIBU is 119 kills ahead of us for #2 on Subzero");
+    assert.equal(headline(none, CFG), "🚨 We are not holding #2 on any map right now.\n• SIBU is 119 kills ahead of us for #2 on Burg\n• SIBU is 119 kills ahead of us for #2 on Sandstorm\n• SIBU is 119 kills ahead of us for #2 on Subzero");
+
+    const mixedPlaces = [{ ...safe[0], position: 1 }, safe[1], { ...safe[2], state: "none", position: null, kills: 0, lead: null, chaser: null }];
+    assert.equal(headline(mixedPlaces, CFG), "We are holding #1 on Burg and #2 on Sandstorm, but no kills on Subzero. Subzero has no kills from us yet.");
 
     const allClose = assessTurf(standings(), { hold_position: 2, close_margin: 400 });
     assert.equal(headline(allClose, CFG), "⚠️ Our spots are under pressure:\n• SIBU is only 272 kills away from taking our second place on Burg\n• SIBU is only 196 kills away from taking our second place on Sandstorm\n• SIBU is only 117 kills away from taking our second place on Subzero");
@@ -99,8 +102,8 @@ test("alerts fire on meaningful transitions only", () => {
     const close = { ...safe[2], state: "close", lead: 21, chaser: "SIBU" };
     assert.equal(alertText(close, "safe", CFG), "⚠️ SIBU is only 21 kills away from taking our second place on Subzero!");
     const lost = { ...safe[1], state: "lost", position: 3, lead: null, chaser: null, deficit: 86, target: "SIBU" };
-    assert.match(alertText(lost, "close", CFG), /^🚨 We lost our spot on Sandstorm, we are #3 now\. SIBU is 85 kills ahead for #2\./);
-    assert.match(alertText(safe[1], "lost", CFG), /^✅ We are back on Sandstorm: #2 with 2,958 kills, 196 ahead of SIBU\./);
+    assert.match(alertText(lost, "close", CFG), /^🚨 We lost #2 on Sandstorm, we are #3 now\. SIBU is 85 kills ahead for #2\./);
+    assert.match(alertText(safe[1], "lost", CFG), /^✅ We are back to #2 on Sandstorm with 2,958 kills, 196 ahead of SIBU\./);
     assert.equal(alertText(safe[1], "close", CFG), null, "going from close back to safe is not news");
 });
 
@@ -142,7 +145,7 @@ test("the report carries the map lines and the time left", () => {
     assert.equal(timeLeftText(now), "2h 10m");
     const { content, embed, needed } = composeTurfReport(safe, CFG, now);
     assert.equal(needed, false);
-    assert.equal(content, "We are steadily holding turf on all three maps :3");
+    assert.equal(content, "We are steadily holding #2 on Burg, Sandstorm and Subzero :3");
     const desc = embed.toJSON().description ?? "";
     assert.ok(desc.includes("**Burg**: #2 with 1,101 kills, 272 ahead of SIBU"), desc);
     assert.ok(desc.includes("⏳ 2h 10m until the turf day ends"), desc);

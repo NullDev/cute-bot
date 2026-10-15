@@ -174,7 +174,14 @@ export const headline = function(maps, cfg){
     const held = maps.filter(m => m.state === "safe" || m.state === "close");
     const lost = maps.filter(m => m.state === "lost" || m.state === "none");
     const close = maps.filter(m => m.state === "close");
-    const list = (/** @type {MapAssessment[]} */ xs) => xs.map(m => m.mapName).join(xs.length === 2 ? " and " : ", ").replace(/, ([^,]*)$/, " and $1");
+    const list = (/** @type {string[]} */ xs) => xs.join(xs.length === 2 ? " and " : ", ").replace(/, ([^,]*)$/, " and $1");
+    // "#1 on Burg and #2 on Sandstorm and Subzero": maps grouped by the place we hold
+    const holding = (/** @type {MapAssessment[]} */ xs) => {
+        const byPos = new Map();
+        for (const m of xs) byPos.set(m.position, [...(byPos.get(m.position) ?? []), m.mapName]);
+        return [...byPos.entries()].sort((a, b) => a[0] - b[0]).map(([pos, names]) => `#${pos} on ${list(names)}`).join(" and ");
+    };
+    const missing = (/** @type {MapAssessment[]} */ xs) => list(xs.map(m => (m.state === "none" ? `no kills on ${m.mapName}` : `only #${m.position} on ${m.mapName}`)));
     // one item reads as a sentence, several as bullet points
     const lines = (/** @type {string[]} */ items) => (items.length === 1 ? ` ${items[0]}.` : "\n" + items.map(i => `• ${i}`).join("\n"));
 
@@ -185,13 +192,13 @@ export const headline = function(maps, cfg){
         ? `${m.target} is ${num(/** @type {number} */ (m.deficit) - 1)} kills ahead of us for #${cfg.hold_position} on ${m.mapName}`
         : `${m.mapName} has no kills from us yet`));
 
-    if (!held.length) return `🚨 We are not holding any map right now.${lines(gaps)}`;
+    if (!held.length) return `🚨 We are not holding #${cfg.hold_position} on any map right now.${lines(gaps)}`;
     if (lost.length){
-        const base = `We are holding ${list(held)} but not ${list(lost)}.${lines(gaps)}`;
+        const base = `We are holding ${holding(held)}, but ${missing(lost)}.${lines(gaps)}`;
         return warnings.length ? `⚠️ ${base}${lines(warnings)}` : base;
     }
     if (warnings.length) return `⚠️${warnings.length === 1 ? "" : " Our spots are under pressure:"}${lines(warnings)}`;
-    return "We are steadily holding turf on all three maps :3";
+    return `We are steadily holding ${holding(held)} :3`;
 };
 
 /**
@@ -241,10 +248,10 @@ export const alertText = function(a, previous, cfg){
     }
     if (a.state === "lost" && (previous === "safe" || previous === "close")){
         const gap = a.deficit !== null && a.target ? ` ${a.target} is ${num(a.deficit - 1)} kills ahead for #${cfg.hold_position}.` : "";
-        return `🚨 We lost our spot on ${a.mapName}, we are #${a.position} now.${gap}`;
+        return `🚨 We lost #${cfg.hold_position} on ${a.mapName}, we are #${a.position} now.${gap}`;
     }
     if ((a.state === "safe" || a.state === "close") && (previous === "lost" || previous === "none")){
-        return `✅ We are back on ${a.mapName}: #${a.position} with ${num(a.kills)} kills${a.lead !== null && a.chaser ? `, ${num(a.lead)} ahead of ${a.chaser}` : ""}.`;
+        return `✅ We are back to #${a.position} on ${a.mapName} with ${num(a.kills)} kills${a.lead !== null && a.chaser ? `, ${num(a.lead)} ahead of ${a.chaser}` : ""}.`;
     }
     return null;
 };
