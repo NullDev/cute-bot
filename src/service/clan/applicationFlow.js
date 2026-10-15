@@ -16,7 +16,7 @@ import { getLinkByDiscord, suggestIgns } from "./identity.js";
 import { fetchRoster, rosterByPlayerId } from "./roster.js";
 import { syncOneMember } from "./sync.js";
 import { postWelcome } from "./welcome.js";
-import { canApply, createApplication, setApplicationMessage, getApplication, finalizeDecision, setInterviewChannel } from "./applications.js";
+import { canApply, createApplication, setApplicationMessage, getApplication, finalizeDecision, setInterviewChannel, markJoined } from "./applications.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -320,7 +320,10 @@ const decide = async function(interaction, app, status, reason){
                 // verified now; recruit and any higher rank arrive once the roster shows them (syncOneMember covers the "already in the clan" case)
                 await target.roles.add([config.ids.verified_role], `application #${app.id} accepted`);
                 const rank = await syncOneMember(target).catch(() => null);
-                if (rank !== null) await postWelcome(interaction.client, app.discordId, app.playerName).catch(() => null);
+                if (rank === null) return;
+                // already on the roster: close the application here so the pending-joins check does not greet them a second time
+                markJoined(db, app.id);
+                await postWelcome(interaction.client, app.discordId, app.playerName).catch(() => null);
             },
             dm: async() => {
                 const user = await interaction.client.users.fetch(app.discordId);
