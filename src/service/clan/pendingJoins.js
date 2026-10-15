@@ -4,6 +4,7 @@ import { rosterByPlayerId } from "./roster.js";
 import { listByStatus, planPendingJoins, markJoined, markReminded, markExpired } from "./applications.js";
 import { fetchRoster } from "./roster.js";
 import { syncOneMember } from "./sync.js";
+import { postWelcome } from "./welcome.js";
 import { api } from "./krunkerApi.js";
 import { getClanDb } from "./db.js";
 import { mainClan, mainGuildId } from "./clans.js";
@@ -42,6 +43,7 @@ export const checkPendingJoins = async function(client, db, roster, guildId, { n
         // the roster shows them now: give recruit (or their rank) right away instead of waiting for the nightly sync
         const member = guild ? await guild.members.fetch(app.discordId).catch(() => null) : null;
         if (member) await syncOneMember(member, { db }).catch(() => null);
+        await postWelcome(client, app.discordId, app.playerName).catch(() => null);
         await dm(app.discordId, "🎉 You are in **[cute]** now. Welcome!");
         await notify(`✅ <@${app.discordId}> (\`${app.playerName}\`) joined the clan in game (application #${app.id}).`);
     }

@@ -15,6 +15,7 @@ import { getClanDb } from "./db.js";
 import { getLinkByDiscord, suggestIgns } from "./identity.js";
 import { fetchRoster, rosterByPlayerId } from "./roster.js";
 import { syncOneMember } from "./sync.js";
+import { postWelcome } from "./welcome.js";
 import { canApply, createApplication, setApplicationMessage, getApplication, finalizeDecision, setInterviewChannel } from "./applications.js";
 
 // ========================= //
@@ -318,7 +319,8 @@ const decide = async function(interaction, app, status, reason){
                 const target = await guild.members.fetch(app.discordId);
                 // verified now; recruit and any higher rank arrive once the roster shows them (syncOneMember covers the "already in the clan" case)
                 await target.roles.add([config.ids.verified_role], `application #${app.id} accepted`);
-                await syncOneMember(target).catch(() => null);
+                const rank = await syncOneMember(target).catch(() => null);
+                if (rank !== null) await postWelcome(interaction.client, app.discordId, app.playerName).catch(() => null);
             },
             dm: async() => {
                 const user = await interaction.client.users.fetch(app.discordId);
