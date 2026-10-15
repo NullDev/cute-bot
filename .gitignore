@@ -18,7 +18,7 @@ data/*.sqlite-shm
 data/*.sqlite-wal
 data/*.sqlite.bak-*
 data/*.json
-
+data/prod/**
 # Python
 __pycache__/
 .venv/
