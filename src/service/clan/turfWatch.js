@@ -154,9 +154,9 @@ export const actionNeeded = (maps, cfg = DEFAULT_TURF) => maps.some(m => m.state
 export const mapLine = function(a, cfg){
     if (a.state === "none") return `**${a.mapName}**: no kills yet today`;
     if (a.state === "lost"){
-        const need = a.deficit !== null && a.target ? `, ${num(a.deficit)} more kills needed to pass ${a.target} for #${cfg.hold_position}` : "";
+        const gap = a.deficit !== null && a.target ? `, ${num(a.deficit - 1)} behind ${a.target} for #${cfg.hold_position}` : "";
         const flag = outOfReach(a, /** @type {any} */ (cfg)) ? " (out of reach today)" : " 🚨";
-        return `**${a.mapName}**: #${a.position} with ${num(a.kills)} kills${need}${flag}`;
+        return `**${a.mapName}**: #${a.position} with ${num(a.kills)} kills${gap}${flag}`;
     }
     const lead = a.lead !== null && a.chaser ? `, ${num(a.lead)} ahead of ${a.chaser}` : "";
     const flag = a.state === "close" ? " ⚠️" : "";
@@ -182,7 +182,7 @@ export const headline = function(maps, cfg){
         ? `${m.chaser} is only ${num(/** @type {number} */ (m.lead))} kills behind us on ${m.mapName}, our first place is at risk`
         : `${m.chaser} is only ${num(/** @type {number} */ (m.lead))} kills away from taking our ${ordinal(/** @type {number} */ (m.position))} place on ${m.mapName}`));
     const gaps = lost.map(m => (m.deficit !== null && m.target
-        ? `${m.target} is ${num(/** @type {number} */ (m.deficit) - 1)} kills ahead of us for #${cfg.hold_position} on ${m.mapName}, we need ${num(/** @type {number} */ (m.deficit))} more`
+        ? `${m.target} is ${num(/** @type {number} */ (m.deficit) - 1)} kills ahead of us for #${cfg.hold_position} on ${m.mapName}`
         : `${m.mapName} has no kills from us yet`));
 
     if (!held.length) return `🚨 We are not holding any map right now.${lines(gaps)}`;
@@ -240,7 +240,7 @@ export const alertText = function(a, previous, cfg){
             : `⚠️ ${a.chaser} is only ${num(a.lead)} kills away from taking our ${ordinal(/** @type {number} */ (a.position))} place on ${a.mapName}!`;
     }
     if (a.state === "lost" && (previous === "safe" || previous === "close")){
-        const gap = a.deficit !== null && a.target ? ` ${a.target} is ${num(a.deficit - 1)} kills ahead, we need ${num(a.deficit)} more to take #${cfg.hold_position} back.` : "";
+        const gap = a.deficit !== null && a.target ? ` ${a.target} is ${num(a.deficit - 1)} kills ahead for #${cfg.hold_position}.` : "";
         return `🚨 We lost our spot on ${a.mapName}, we are #${a.position} now.${gap}`;
     }
     if ((a.state === "safe" || a.state === "close") && (previous === "lost" || previous === "none")){

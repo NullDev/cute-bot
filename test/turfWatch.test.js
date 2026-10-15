@@ -59,7 +59,7 @@ test("a map where we sit below the hold position is lost with the deficit to the
     assert.equal(a[0].state, "lost");
     assert.equal(a[0].deficit, 301);
     assert.equal(a[0].target, "SIBU");
-    assert.match(mapLine(a[0], CFG), /#4 with 600 kills, 301 more kills needed to pass SIBU for #2/);
+    assert.match(mapLine(a[0], CFG), /#4 with 600 kills, 300 behind SIBU for #2/);
 });
 
 test("outside the top five we still get our own kills and the hold line from the board", () => {
@@ -82,10 +82,10 @@ test("headline wording for the four situations", () => {
     assert.equal(headline(close, CFG), "⚠️ SIBU is only 117 kills away from taking our second place on Subzero.");
 
     const mixed = safe.map(m => (m.mapName === "Sandstorm" ? { ...m, state: "lost", position: 3, lead: null, chaser: null, deficit: 86, target: "SIBU" } : m));
-    assert.equal(headline(mixed, CFG), "We are holding Burg and Subzero but not Sandstorm. SIBU is 85 kills ahead of us for #2 on Sandstorm, we need 86 more.");
+    assert.equal(headline(mixed, CFG), "We are holding Burg and Subzero but not Sandstorm. SIBU is 85 kills ahead of us for #2 on Sandstorm.");
 
     const none = safe.map(m => ({ ...m, state: "lost", position: 4, lead: null, chaser: null, deficit: 120, target: "SIBU" }));
-    assert.equal(headline(none, CFG), "🚨 We are not holding any map right now.\n• SIBU is 119 kills ahead of us for #2 on Burg, we need 120 more\n• SIBU is 119 kills ahead of us for #2 on Sandstorm, we need 120 more\n• SIBU is 119 kills ahead of us for #2 on Subzero, we need 120 more");
+    assert.equal(headline(none, CFG), "🚨 We are not holding any map right now.\n• SIBU is 119 kills ahead of us for #2 on Burg\n• SIBU is 119 kills ahead of us for #2 on Sandstorm\n• SIBU is 119 kills ahead of us for #2 on Subzero");
 
     const allClose = assessTurf(standings(), { hold_position: 2, close_margin: 400 });
     assert.equal(headline(allClose, CFG), "⚠️ Our spots are under pressure:\n• SIBU is only 272 kills away from taking our second place on Burg\n• SIBU is only 196 kills away from taking our second place on Sandstorm\n• SIBU is only 117 kills away from taking our second place on Subzero");
@@ -99,7 +99,7 @@ test("alerts fire on meaningful transitions only", () => {
     const close = { ...safe[2], state: "close", lead: 21, chaser: "SIBU" };
     assert.equal(alertText(close, "safe", CFG), "⚠️ SIBU is only 21 kills away from taking our second place on Subzero!");
     const lost = { ...safe[1], state: "lost", position: 3, lead: null, chaser: null, deficit: 86, target: "SIBU" };
-    assert.match(alertText(lost, "close", CFG), /^🚨 We lost our spot on Sandstorm, we are #3 now\. SIBU is 85 kills ahead, we need 86 more to take #2 back\./);
+    assert.match(alertText(lost, "close", CFG), /^🚨 We lost our spot on Sandstorm, we are #3 now\. SIBU is 85 kills ahead for #2\./);
     assert.match(alertText(safe[1], "lost", CFG), /^✅ We are back on Sandstorm: #2 with 2,958 kills, 196 ahead of SIBU\./);
     assert.equal(alertText(safe[1], "close", CFG), null, "going from close back to safe is not news");
 });
