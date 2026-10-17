@@ -330,7 +330,7 @@ const decide = async function(interaction, app, status, reason){
                 if (rank === null) return;
                 // already on the roster: close the application here so the pending-joins check does not greet them a second time
                 markJoined(db, app.id);
-                await postWelcome(interaction.client, app.discordId, app.playerName).catch(() => null);
+                await postWelcome(interaction.client, app.discordId, app.playerName).catch(e => Log.warn(`[CLAN] Welcome for ${app.playerName} failed: ${e?.message ?? e}`));
             },
             dm: async() => {
                 const user = await interaction.client.users.fetch(app.discordId);
