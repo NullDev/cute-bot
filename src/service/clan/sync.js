@@ -187,16 +187,16 @@ export const buildSyncEmbed = function({ diff, result, dryRun, roster, skippedRe
  *
  * @param {import("../client.js").default} client
  * @param {string} guildId
- * @param {{ dryRun?: boolean, force?: boolean, db?: import("better-sqlite3").Database, krunker?: import("./krunkerApi.js").KrunkerApi }} [options]
+ * @param {{ dryRun?: boolean, force?: boolean, db?: import("better-sqlite3").Database, krunker?: import("./krunkerApi.js").KrunkerApi, roster?: import("./roster.js").Roster }} [options] roster: an already fetched roster to sync against instead of fetching a fresh one
  * @return {Promise<{ diff: ReturnType<typeof computeDiff>, result: Awaited<ReturnType<typeof applyDiff>> | null, embed: EmbedBuilder | null, files: AttachmentBuilder[] }>}
  */
-export const runClanSync = async function(client, guildId, { dryRun = false, force = false, db = getClanDb(), krunker = api } = {}){
+export const runClanSync = async function(client, guildId, { dryRun = false, force = false, db = getClanDb(), krunker = api, roster: givenRoster } = {}){
     if (!hasClanRoleIds(config.ids.clan)) throw new Error("Clan role ids are not configured (ids.clan.recruit/soldier/captain)");
     const guild = await client.guilds.fetch(guildId);
     if (!isMainGuild(guildId)) throw new Error("Role sync only runs on the main server");
     const clan = mainClan();
     if (!clan) throw new Error("No clan configured for the main server (clan.main_server and clan.clans)");
-    const roster = await fetchRoster(db, krunker, { clanName: clan.name });
+    const roster = givenRoster ?? await fetchRoster(db, krunker, { clanName: clan.name });
     const guildMembers = await guild.members.fetch();
     const members = guildMembers.filter(m => !m.user.bot).map(m => ({ discordId: m.id, roleIds: [...m.roles.cache.keys()] }));
 

@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rolesForRank, computeDiff, capField, guardRemovals, buildSyncEmbed, hasClanRoleIds } from "../src/service/clan/sync.js";
+import { Collection } from "discord.js";
+import { rolesForRank, computeDiff, capField, guardRemovals, buildSyncEmbed, hasClanRoleIds, runClanSync } from "../src/service/clan/sync.js";
 import { RANK } from "../src/service/clan/roster.js";
+import { createClanDb } from "../src/service/clan/db.js";
+import { config } from "../config/config.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -117,4 +120,31 @@ test("buildSyncEmbed attaches the full text when removals were held back", () =>
     const skipped = [1, 2, 3].map(n => ({ discordId: `u${n}`, roleIds: ["R"] }));
     assert.equal(buildSyncEmbed({ diff, result: null, dryRun: true, roster, skippedRemovals: skipped }).files.length, 1);
     assert.equal(buildSyncEmbed({ diff, result: null, dryRun: true, roster }).files.length, 0);
+});
+
+test("runClanSync uses a roster handed in instead of fetching one", async() => {
+    const saved = { clan: config.clan.clans, main: config.clan.main_server, ids: { ...config.ids.clan } };
+    config.clan.main_server = "g1";
+    config.clan.clans = [{ discord: "g1", name: "cute", id: 1 }];
+    Object.assign(config.ids.clan, IDS);
+    try {
+        const db = createClanDb(":memory:");
+        const guild = {
+            members: { fetch: async() => new Collection([["u1", { id: "u1", user: { bot: false }, roles: { cache: new Collection() } }]]) },
+            channels: { fetch: async() => null },
+        };
+        const client = /** @type {any} */ ({ guilds: { fetch: async() => guild } });
+        const krunker = /** @type {any} */ ({ getClan: async() => { throw new Error("must not fetch"); } });
+        const roster = { clanId: 1, clanName: "cute", members: [{ playerId: 1, playerName: "V", rank: 0, score: 0, s7: 0, hacker: false }], unresolved: [] };
+
+        await assert.rejects(() => runClanSync(client, "g1", { dryRun: true, db, krunker }), /must not fetch/);
+        const { diff, result } = await runClanSync(client, "g1", { dryRun: true, db, krunker, roster });
+        assert.deepEqual(diff, { add: [], remove: [], unlinkedWithRoles: [] });
+        assert.equal(result, null);
+    }
+    finally {
+        config.clan.clans = saved.clan;
+        config.clan.main_server = saved.main;
+        Object.assign(config.ids.clan, saved.ids);
+    }
 });
