@@ -47,15 +47,31 @@ test("application embed copes with no profile and no turf data", () => {
 });
 
 test("decision row carries a profile link button next to Accept and Reject", () => {
-    const row = decisionComponents(7, false, profileUrl("NulPing")).toJSON();
+    const row = decisionComponents(7, "pending", profileUrl("NulPing")).toJSON();
     assert.deepEqual(row.components.map(c => c.label), ["Accept", "Reject", "Show Evaluation", "Start Interview", "Profile"]);
+    assert.equal(row.components[0].custom_id, "application_accept:7");
+    assert.equal(row.components[1].custom_id, "application_reject:7");
     assert.equal(row.components[2].custom_id, "application_eval:7");
     assert.equal(row.components[3].custom_id, "application_interview:7");
     assert.equal(row.components[4].url, profileUrl("NulPing"));
-    assert.equal(row.components[4].disabled, undefined);
-    const done = decisionComponents(7, true, profileUrl("NulPing")).toJSON();
-    assert.deepEqual(done.components.slice(0, 2).map(c => c.disabled), [true, true]);
-    assert.equal(done.components[2].disabled, undefined, "evaluation stays available after a decision");
+    assert.deepEqual(row.components.map(c => c.disabled), [undefined, undefined, undefined, undefined, undefined]);
+});
+
+test("decided applications swap Accept and Reject for a single undo button", () => {
+    const accepted = decisionComponents(7, "accepted", profileUrl("NulPing")).toJSON();
+    assert.deepEqual(accepted.components.map(c => c.label), ["Undo Accept", "Show Evaluation", "Start Interview", "Profile"]);
+    assert.equal(accepted.components[0].custom_id, "application_reopen:7");
+    assert.equal(accepted.components[0].disabled, undefined);
+    const rejected = decisionComponents(7, "rejected", profileUrl("NulPing")).toJSON();
+    assert.deepEqual(rejected.components.map(c => c.label), ["Undo Reject", "Show Evaluation", "Start Interview", "Profile"]);
+    assert.equal(rejected.components[0].custom_id, "application_reopen:7");
+});
+
+test("joined and expired applications keep only the informational buttons", () => {
+    for (const status of ["joined", "expired"]){
+        const row = decisionComponents(7, status, profileUrl("NulPing")).toJSON();
+        assert.deepEqual(row.components.map(c => c.label), ["Show Evaluation", "Start Interview", "Profile"], status);
+    }
 });
 
 test("interview channel names are discord-safe", () => {

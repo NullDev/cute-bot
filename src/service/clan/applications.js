@@ -1,5 +1,5 @@
 import Log from "../../util/log.js";
-import { linkPlayer, getLinkByPlayer } from "./identity.js";
+import { linkPlayer, getLinkByPlayer, getLinkByDiscord, unlinkDiscord } from "./identity.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -154,6 +154,50 @@ export const finalizeDecision = async function(db, { id, status, reviewerId, rea
     }
 
     const result = { rolesOk, dmOk, rolesError };
+    if (effects.editEmbed) await effects.editEmbed(app, result).catch(e => Log.warn(`[CLAN] Embed edit for application ${id} failed: ${e?.message ?? e}`));
+
+    return { app, ...result };
+};
+
+/**
+ * Undo a decision: back to pending, then the side effects (each one caught).
+ * An accept also drops the IGN link, but only when it still is the one this application made.
+ *
+ * @param {import("better-sqlite3").Database} db
+ * @param {{ id: number, effects: { revokeRoles?: (app: Application) => Promise<any>, dm?: (app: Application, previousStatus: "accepted" | "rejected") => Promise<any>, editEmbed?: (app: Application, result: { previousStatus: "accepted" | "rejected", rolesOk: boolean, dmOk: boolean, rolesError: string | null }) => Promise<any> } }} input
+ * @return {Promise<{ app: Application, previousStatus: "accepted" | "rejected", rolesOk: boolean, dmOk: boolean, rolesError: string | null }>}
+ */
+export const reopenApplication = async function(db, { id, effects }){
+    const current = getApplication(db, id);
+    if (!current) throw new Error(`Application ${id} not found`);
+    if (current.status !== "accepted" && current.status !== "rejected") throw new Error(`Application ${id} is ${current.status} and cannot be reopened`);
+    const previousStatus = /** @type {"accepted" | "rejected"} */ (current.status);
+
+    db.prepare("update applications set status = 'pending', reviewer_id = null, reason = null, decided_at = null, reminded_at = null where id = ?").run(id);
+    const app = /** @type {Application} */ (getApplication(db, id));
+
+    let rolesOk = true;
+    let rolesError = null;
+    if (previousStatus === "accepted"){
+        const link = getLinkByDiscord(db, app.guildId, app.discordId);
+        if (link && link.playerId === app.playerId && link.source === "application") unlinkDiscord(db, app.guildId, app.discordId);
+        if (effects.revokeRoles){
+            await effects.revokeRoles(app).catch(e => {
+                rolesOk = false;
+                rolesError = String(e?.message ?? e);
+            });
+        }
+    }
+
+    let dmOk = true;
+    if (effects.dm){
+        await effects.dm(app, previousStatus).catch(e => {
+            dmOk = false;
+            Log.warn(`[CLAN] Reopen DM for application ${id} failed: ${e?.message ?? e}`);
+        });
+    }
+
+    const result = { previousStatus, rolesOk, dmOk, rolesError };
     if (effects.editEmbed) await effects.editEmbed(app, result).catch(e => Log.warn(`[CLAN] Embed edit for application ${id} failed: ${e?.message ?? e}`));
 
     return { app, ...result };

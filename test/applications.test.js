@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createClanDb } from "../src/service/clan/db.js";
 import { linkPlayer, getLinkByDiscord } from "../src/service/clan/identity.js";
 import {
-    canApply, createApplication, setApplicationMessage, getApplication, finalizeDecision, listByStatus, setInterviewChannel,
+    canApply, createApplication, setApplicationMessage, getApplication, finalizeDecision, reopenApplication, listByStatus, setInterviewChannel,
     markJoined, markReminded, markExpired, planPendingJoins,
 } from "../src/service/clan/applications.js";
 
@@ -125,3 +125,66 @@ test("the follow-up channel id is stored and cleared", () => {
     assert.equal(getApplication(db, id).interviewChannelId, null);
 });
 
+
+test("reopenApplication puts an accepted application back to pending, unlinks the player and runs the effects", async() => {
+    const db = fresh();
+    const id = createApplication(db, { guildId: "g", discordId: "a", playerId: 1, playerName: "V", answers: ANSWERS, now: 0 });
+    await finalizeDecision(db, { id, status: "accepted", reviewerId: "mod", reason: null, now: 1, effects: {} });
+    markReminded(db, id, 2);
+    const calls = [];
+    const result = await reopenApplication(db, {
+        id,
+        effects: {
+            revokeRoles: async() => { calls.push("roles"); },
+            dm: async() => { throw new Error("closed dms"); },
+            editEmbed: async(app, r) => { calls.push("embed:" + r.dmOk); },
+        },
+    });
+    assert.equal(result.previousStatus, "accepted");
+    assert.equal(result.dmOk, false);
+    assert.equal(result.rolesOk, true);
+    assert.deepEqual(calls, ["roles", "embed:false"]);
+    const app = getApplication(db, id);
+    assert.equal(app.status, "pending");
+    assert.equal(app.reviewerId, null);
+    assert.equal(app.reason, null);
+    assert.equal(app.decidedAt, null);
+    assert.equal(app.remindedAt, null);
+    assert.equal(getLinkByDiscord(db, "g", "a"), null);
+    assert.equal(canApply(db, { guildId: "g", discordId: "a", playerId: 1, now: 3, cooldownDays: 7 }).reason, "pending");
+});
+
+test("reopenApplication keeps a link that did not come from this application", async() => {
+    const db = fresh();
+    const id = createApplication(db, { guildId: "g", discordId: "a", playerId: 1, playerName: "V", answers: ANSWERS, now: 0 });
+    await finalizeDecision(db, { id, status: "accepted", reviewerId: "mod", reason: null, now: 1, effects: {} });
+    linkPlayer(db, { guildId: "g", discordId: "a", playerId: 2, playerName: "W", source: "verify", now: 2 });
+    await reopenApplication(db, { id, effects: {} });
+    assert.equal(getLinkByDiscord(db, "g", "a").playerId, 2);
+});
+
+test("reopenApplication of a rejection clears the reason and the cooldown without touching roles", async() => {
+    const db = fresh();
+    const id = createApplication(db, { guildId: "g", discordId: "a", playerId: 1, playerName: "V", answers: ANSWERS, now: 0 });
+    await finalizeDecision(db, { id, status: "rejected", reviewerId: "mod", reason: "nope", now: 1, effects: {} });
+    assert.equal(canApply(db, { guildId: "g", discordId: "a", playerId: 1, now: 2, cooldownDays: 7 }).reason, "cooldown");
+    let revoked = false;
+    const result = await reopenApplication(db, { id, effects: { revokeRoles: async() => { revoked = true; } } });
+    assert.equal(result.previousStatus, "rejected");
+    assert.equal(revoked, false);
+    const app = getApplication(db, id);
+    assert.equal(app.status, "pending");
+    assert.equal(app.reason, null);
+    assert.equal(canApply(db, { guildId: "g", discordId: "a", playerId: 1, now: 2, cooldownDays: 7 }).reason, "pending");
+});
+
+test("reopenApplication refuses pending and joined applications", async() => {
+    const db = fresh();
+    const id = createApplication(db, { guildId: "g", discordId: "a", playerId: 1, playerName: "V", answers: ANSWERS, now: 0 });
+    await assert.rejects(() => reopenApplication(db, { id, effects: {} }), /pending/);
+    await finalizeDecision(db, { id, status: "accepted", reviewerId: "mod", reason: null, now: 1, effects: {} });
+    markJoined(db, id, 2);
+    await assert.rejects(() => reopenApplication(db, { id, effects: {} }), /joined/);
+    assert.equal(getApplication(db, id).status, "joined");
+    await assert.rejects(() => reopenApplication(db, { id: 999, effects: {} }), /not found/);
+});

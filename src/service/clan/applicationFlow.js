@@ -16,7 +16,7 @@ import { getLinkByDiscord, suggestIgns } from "./identity.js";
 import { fetchRoster, rosterByPlayerId } from "./roster.js";
 import { syncOneMember } from "./sync.js";
 import { postWelcome } from "./welcome.js";
-import { canApply, createApplication, setApplicationMessage, getApplication, finalizeDecision, setInterviewChannel, markJoined } from "./applications.js";
+import { canApply, createApplication, setApplicationMessage, getApplication, finalizeDecision, reopenApplication, setInterviewChannel, markJoined } from "./applications.js";
 
 // ========================= //
 // = Copyright (c) NullDev = //
@@ -27,6 +27,7 @@ export const APPLY_MODAL = "application_submit";
 export const ACCEPT_PREFIX = "application_accept:";
 export const REJECT_PREFIX = "application_reject:";
 export const REJECT_MODAL_PREFIX = "application_reject_modal:";
+export const REOPEN_PREFIX = "application_reopen:";
 export const EVALUATE_PREFIX = "application_eval:";
 export const INTERVIEW_PREFIX = "application_interview:";
 export const INTERVIEW_CLOSE_PREFIX = "application_interview_close:";
@@ -52,18 +53,24 @@ const whisper = async function(interaction, content){
 };
 
 /**
- * Button row for a pending application
+ * Button row of an application: Accept and Reject while pending, one undo button once decided, nothing to decide after that
  *
  * @param {number} id
- * @param {boolean} disabled
+ * @param {string} status application status
  * @param {string} [url] profile page, added as a link button when given
  * @return {ActionRowBuilder<ButtonBuilder>}
  */
-export const decisionComponents = function(id, disabled, url){
-    const row = /** @type {ActionRowBuilder<ButtonBuilder>} */ (new ActionRowBuilder()).addComponents(
-        new ButtonBuilder().setCustomId(ACCEPT_PREFIX + id).setLabel("Accept").setStyle(ButtonStyle.Success).setDisabled(disabled),
-        new ButtonBuilder().setCustomId(REJECT_PREFIX + id).setLabel("Reject").setStyle(ButtonStyle.Danger).setDisabled(disabled),
-    );
+export const decisionComponents = function(id, status, url){
+    const row = /** @type {ActionRowBuilder<ButtonBuilder>} */ (new ActionRowBuilder());
+    if (status === "pending"){
+        row.addComponents(
+            new ButtonBuilder().setCustomId(ACCEPT_PREFIX + id).setLabel("Accept").setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(REJECT_PREFIX + id).setLabel("Reject").setStyle(ButtonStyle.Danger),
+        );
+    }
+    else if (status === "accepted" || status === "rejected"){
+        row.addComponents(new ButtonBuilder().setCustomId(REOPEN_PREFIX + id).setLabel(status === "accepted" ? "Undo Accept" : "Undo Reject").setStyle(ButtonStyle.Secondary));
+    }
     row.addComponents(new ButtonBuilder().setCustomId(EVALUATE_PREFIX + id).setLabel("Show Evaluation").setStyle(ButtonStyle.Secondary));
     row.addComponents(new ButtonBuilder().setCustomId(INTERVIEW_PREFIX + id).setLabel("Start Interview").setStyle(ButtonStyle.Secondary));
     if (url) row.addComponents(new ButtonBuilder().setLabel("Profile").setStyle(ButtonStyle.Link).setURL(url));
@@ -255,7 +262,7 @@ export const handleApplicationSubmit = async function(interaction){
             content: `${roleIds.map(r => `<@&${r}>`).join(" ")} New application from <@${interaction.user.id}>`.trim(),
             allowedMentions: { roles: roleIds, users: [] },
             embeds: [buildApplicationEmbed(app, profile, null, turf, clan.name)],
-            components: [decisionComponents(id, false, profileUrl(app.playerName))],
+            components: [decisionComponents(id, "pending", profileUrl(app.playerName))],
         });
         // informal vote only, nothing reads these
         for (const emoji of VOTE_REACTIONS) await message.react(emoji).catch(() => null);
@@ -347,7 +354,7 @@ const decide = async function(interaction, app, status, reason){
                 if (!message) return;
                 await message.edit({
                     embeds: [buildApplicationEmbed(decided, profile, { status, reviewerId: decided.reviewerId ?? "", reason, decidedAt: decided.decidedAt ?? Date.now(), ...result }, turf)],
-                    components: [decisionComponents(decided.id, true, profileUrl(decided.playerName))],
+                    components: [decisionComponents(decided.id, status, profileUrl(decided.playerName))],
                 });
             },
         },
@@ -396,6 +403,74 @@ export const handleApplicationDecision = async function(interaction){
         return;
     }
     await whisper(interaction, `Accepted #${id}.`);
+};
+
+/**
+ * Undo button: back to pending, roles and link dropped, applicant told, embed restored, a note in the channel
+ *
+ * @param {import("discord.js").ButtonInteraction} interaction
+ */
+export const handleApplicationReopen = async function(interaction){
+    const { member, guild } = /** @type {{ member: import("discord.js").GuildMember | null, guild: import("discord.js").Guild }} */ (interaction);
+    if (!mayDecide(member, interaction.channelId)){
+        await whisper(interaction, "You are not allowed to decide applications.");
+        return;
+    }
+
+    const id = Number(interaction.customId.slice(REOPEN_PREFIX.length));
+    const db = getClanDb();
+    const app = getApplication(db, id);
+    if (!app){
+        await whisper(interaction, "Unknown application.");
+        return;
+    }
+    if (app.status !== "accepted" && app.status !== "rejected"){
+        // e.g. the player showed up on the roster in the meantime; drop the stale undo button
+        await interaction.update({ components: [decisionComponents(app.id, app.status, profileUrl(app.playerName))] }).catch(() => null);
+        await interaction.followUp({ content: `Cannot reopen #${id}, it is already ${app.status}.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
+        return;
+    }
+
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    const profile = await api.getPlayer(app.playerName).catch(() => null);
+    const turf = profile ? await api.getTurfPlayer(profile.player_id).catch(() => null) : null;
+
+    let result;
+    try {
+        result = await reopenApplication(db, {
+            id,
+            effects: {
+                revokeRoles: async reopened => {
+                    const target = await guild.members.fetch(reopened.discordId);
+                    await target.roles.remove([config.ids.verified_role], `application #${reopened.id} reopened`);
+                },
+                dm: async(reopened, previous) => {
+                    const user = await interaction.client.users.fetch(reopened.discordId);
+                    await user.send(`Sorry, there was a mistake on our side: your application to **[cute]** was marked as ${previous} by accident. It has been reopened automatically and is back in review.`);
+                },
+                editEmbed: async reopened => {
+                    const channel = await guild.channels.fetch(reopened.channelId ?? "").catch(() => null);
+                    const message = channel?.isTextBased() ? await channel.messages.fetch(reopened.messageId ?? "").catch(() => null) : null;
+                    if (!message) return;
+                    await message.edit({
+                        embeds: [buildApplicationEmbed(reopened, profile, null, turf)],
+                        components: [decisionComponents(reopened.id, "pending", profileUrl(reopened.playerName))],
+                    });
+                    await message.reply({ content: `↩️ Application #${reopened.id} was reopened by <@${interaction.user.id}>.`, allowedMentions: { parse: [] } }).catch(() => null);
+                },
+            },
+        });
+    }
+    catch (e){
+        Log.warn(`[CLAN] Could not reopen application #${id}: ${e instanceof Error ? e.message : String(e)}`);
+        await whisper(interaction, "Could not reopen the application: " + (e instanceof Error ? e.message : String(e)));
+        return;
+    }
+
+    const notes = [];
+    if (!result.rolesOk) notes.push(`roles not removed: ${result.rolesError ?? "unknown error"}`);
+    if (!result.dmOk) notes.push("could not DM the applicant");
+    await whisper(interaction, `Reopened #${id}.${notes.length ? ` ⚠️ ${notes.join(", ")}` : ""}`);
 };
 
 /**
